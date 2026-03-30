@@ -1,5 +1,5 @@
-<?xml version="1.0" ?>
-<addon id="repository.echostorm" name="EchoRepo" version="1.0.0" provider-name="Echo-Storm">
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="repository.echostorm" name="EchoRepo" version="1.0.1" provider-name="Echo-Storm">
   <extension point="xbmc.addon.repository" name="EchoRepo">
     <info compressed="false">https://raw.githubusercontent.com/Echo-Storm/EchoRepo/main/addons.xml</info>
     <checksum>https://raw.githubusercontent.com/Echo-Storm/EchoRepo/main/addons.xml.md5</checksum>
@@ -10,10 +10,8 @@
     <description>Repository for Echo-Storm's custom Kodi addons, skins, and tools</description>
     <platform>all</platform>
     <assets>
-      <icon text="icon/icon.png"/>
-    </assets>
-    <assets>
-      <fanart text="fanart/fanart.jpg"/>
+      <icon>icon/icon.png</icon>
+      <fanart>fanart/fanart.jpg</fanart>
     </assets>
   </extension>
 </addon>
