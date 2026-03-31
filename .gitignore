@@ -4,16 +4,8 @@ __pycache__/
 *$py.class
 *.so
 .Python
-env/
 venv/
-*.egg-info/
-dist/
-build/
-
-# OS
-.DS_Store
-Thumbs.db
-desktop.ini
+env/
 
 # IDE
 .vscode/
@@ -21,10 +13,12 @@ desktop.ini
 *.swp
 *.swo
 
-# Temporary files
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temp
 *.tmp
 *.bak
 *~
-
-# Logs
-*.log

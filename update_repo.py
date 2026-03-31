@@ -1,315 +1,292 @@
 #!/usr/bin/env python3
 """
 EchoRepo Maintenance Script
-Automatically updates addons.xml, creates zip files, and maintains the repository
+Scans addon folders, generates addons.xml, creates zips in zips/{addon_id}/
+
+Usage:
+    python3 update_repo.py              # Full update + git commit/push
+    python3 update_repo.py --no-commit  # Generate files only, no git operations
+    python3 update_repo.py --validate   # Validate addon.xml files only
 """
 
 import os
 import sys
 import hashlib
 import zipfile
+import subprocess
 import xml.etree.ElementTree as ET
-from xml.dom import minidom
 from pathlib import Path
 from datetime import datetime
-import shutil
 
-class RepoMaintenance:
-    def __init__(self, base_path):
-        self.base_path = Path(base_path)
-        self.addons = []
-        self.excluded_dirs = {
-            '.git', '__pycache__', '.vscode', '.idea',
-            'venv', 'env', 'node_modules'
-        }
-        
-    def find_addons(self):
-        """Find all addon directories with addon.xml files"""
-        print("Scanning for addons...")
-        
-        for item in self.base_path.iterdir():
-            if not item.is_dir():
-                continue
-            
-            if item.name in self.excluded_dirs:
-                continue
-            
+
+# === Configuration ===
+REPO_ROOT = Path(__file__).parent.resolve()
+ZIPS_DIR = REPO_ROOT / "zips"
+ADDONS_XML = ZIPS_DIR / "addons.xml"
+ADDONS_XML_MD5 = ZIPS_DIR / "addons.xml.md5"
+
+EXCLUDED_DIRS = {
+    ".git", "__pycache__", "zips", ".vscode", ".idea",
+    "venv", "env", "node_modules"
+}
+
+EXCLUDED_FILES = {
+    ".gitignore", ".gitattributes", "desktop.ini", "Thumbs.db", ".DS_Store"
+}
+
+
+# === Helper Functions ===
+
+def find_addon_folders():
+    """Find all valid addon folders (directories containing addon.xml)."""
+    addons = []
+    for item in REPO_ROOT.iterdir():
+        if item.is_dir() and item.name not in EXCLUDED_DIRS:
             addon_xml = item / "addon.xml"
             if addon_xml.exists():
-                self.addons.append(item)
-                print(f"  ✓ Found: {item.name}")
-        
-        if not self.addons:
-            print("  ⚠ No addons found!")
-        
-        print(f"\nTotal addons: {len(self.addons)}\n")
-        return self.addons
+                addons.append(item)
+    return sorted(addons, key=lambda p: p.name)
+
+
+def parse_addon_xml(addon_path):
+    """Parse addon.xml and return (id, version, name, root_element)."""
+    addon_xml = addon_path / "addon.xml"
+    tree = ET.parse(addon_xml)
+    root = tree.getroot()
     
-    def create_addon_zip(self, addon_path):
-        """Create a zip file for an addon"""
-        addon_id = addon_path.name
-        
-        # Parse addon.xml to get version
-        tree = ET.parse(addon_path / "addon.xml")
-        root = tree.getroot()
-        version = root.get('version', '0.0.0')
-        
-        zip_filename = f"{addon_id}-{version}.zip"
-        zip_path = self.base_path / zip_filename
-        
-        print(f"Creating {zip_filename}...")
-        
-        # Remove old zip if exists
-        if zip_path.exists():
-            zip_path.unlink()
-        
-        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            for root, dirs, files in os.walk(addon_path):
-                # Remove excluded directories from walk
-                dirs[:] = [d for d in dirs if d not in self.excluded_dirs]
-                
-                for file in files:
-                    file_path = Path(root) / file
-                    
-                    # Skip certain files
-                    if file in ['.gitignore', '.gitattributes', 'desktop.ini', 'Thumbs.db']:
-                        continue
-                    if file.endswith(('.pyc', '.pyo', '.tmp', '.bak', '~')):
-                        continue
-                    
-                    # Calculate archive path
-                    rel_path = file_path.relative_to(addon_path)
-                    archive_path = f"{addon_id}/{rel_path}"
-                    
-                    zipf.write(file_path, archive_path)
-        
-        # Get zip file size
-        size_mb = zip_path.stat().st_size / (1024 * 1024)
-        print(f"  ✓ Created {zip_filename} ({size_mb:.2f} MB)")
-        
-        return zip_path, version
+    addon_id = root.get("id")
+    version = root.get("version")
+    name = root.get("name")
     
-    def generate_addons_xml(self):
-        """Generate the addons.xml file"""
-        print("\nGenerating addons.xml...")
-        
-        # Create root element
-        addons_root = ET.Element("addons")
-        
-        for addon_path in self.addons:
-            # Parse the addon's addon.xml
-            tree = ET.parse(addon_path / "addon.xml")
-            addon_element = tree.getroot()
+    if not addon_id or not version:
+        raise ValueError(f"Missing id or version in {addon_xml}")
+    
+    return addon_id, version, name or addon_id, root
+
+
+def create_addon_zip(addon_path, addon_id, version):
+    """
+    Create zip for addon in zips/{addon_id}/ folder.
+    Also copies addon.xml, icon.png, fanart.jpg to the zip folder for Kodi browsing.
+    """
+    zip_dir = ZIPS_DIR / addon_id
+    zip_dir.mkdir(parents=True, exist_ok=True)
+    
+    zip_name = f"{addon_id}-{version}.zip"
+    zip_path = zip_dir / zip_name
+    
+    # Remove any existing zips for this addon (old versions)
+    for old_zip in zip_dir.glob(f"{addon_id}-*.zip"):
+        old_zip.unlink()
+        print(f"    Removed old: {old_zip.name}")
+    
+    # Create the zip
+    print(f"    Creating {zip_name}...")
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        for root_dir, dirs, files in os.walk(addon_path):
+            # Skip excluded directories
+            dirs[:] = [d for d in dirs if d not in EXCLUDED_DIRS]
             
-            # Append to addons.xml
-            addons_root.append(addon_element)
-        
-        # Pretty print
-        xml_str = minidom.parseString(ET.tostring(addons_root)).toprettyxml(indent="  ")
-        # Remove extra blank lines and XML declaration
-        lines = [line for line in xml_str.split('\n') if line.strip()]
-        xml_str = '\n'.join(lines[1:])  # Skip XML declaration
-        
-        # Add proper XML header
-        final_xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' + xml_str
-        
-        # Write to file
-        addons_xml_path = self.base_path / "addons.xml"
-        with open(addons_xml_path, 'w', encoding='utf-8') as f:
-            f.write(final_xml)
-        
-        print(f"  ✓ {addons_xml_path}")
-        return addons_xml_path
-    
-    def generate_md5(self, file_path):
-        """Generate MD5 checksum for a file"""
-        print(f"\nGenerating MD5 checksum for {file_path.name}...")
-        
-        md5_hash = hashlib.md5()
-        with open(file_path, 'rb') as f:
-            md5_hash.update(f.read())
-        
-        md5_value = md5_hash.hexdigest()
-        
-        # Write to .md5 file
-        md5_path = file_path.with_suffix('.xml.md5')
-        with open(md5_path, 'w') as f:
-            f.write(md5_value)
-        
-        print(f"  ✓ {md5_path}")
-        print(f"  MD5: {md5_value}")
-        return md5_path
-    
-    def cleanup_old_zips(self):
-        """Remove old zip files for addons that have been updated"""
-        print("\nCleaning up old zip files...")
-        
-        # Get current addon versions
-        current_zips = set()
-        for addon_path in self.addons:
-            addon_id = addon_path.name
-            tree = ET.parse(addon_path / "addon.xml")
-            root = tree.getroot()
-            version = root.get('version', '0.0.0')
-            current_zips.add(f"{addon_id}-{version}.zip")
-        
-        # Find and remove old zips
-        removed_count = 0
-        for zip_file in self.base_path.glob("*.zip"):
-            if zip_file.name not in current_zips:
-                # Check if it's an addon zip (not repo zip)
-                if zip_file.name.count('-') >= 1:  # Has version number
-                    print(f"  Removing old: {zip_file.name}")
-                    zip_file.unlink()
-                    removed_count += 1
-        
-        if removed_count == 0:
-            print("  No old zips to remove")
-        else:
-            print(f"  ✓ Removed {removed_count} old zip(s)")
-    
-    def generate_report(self):
-        """Generate a maintenance report"""
-        print("\n" + "="*60)
-        print("Maintenance Report")
-        print("="*60 + "\n")
-        
-        print(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"Repository path: {self.base_path}")
-        print(f"Total addons: {len(self.addons)}\n")
-        
-        print("Addon Versions:")
-        for addon_path in sorted(self.addons, key=lambda x: x.name):
-            tree = ET.parse(addon_path / "addon.xml")
-            root = tree.getroot()
-            addon_id = root.get('id')
-            version = root.get('version')
-            name = root.get('name')
-            print(f"  • {name} ({addon_id}) - v{version}")
-        
-        print("\n" + "="*60)
-    
-    def validate_addons(self):
-        """Validate addon.xml files"""
-        print("\nValidating addon.xml files...")
-        
-        valid = True
-        for addon_path in self.addons:
-            addon_xml = addon_path / "addon.xml"
-            
-            try:
-                tree = ET.parse(addon_xml)
-                root = tree.getroot()
-                
-                # Check required attributes
-                addon_id = root.get('id')
-                version = root.get('version')
-                name = root.get('name')
-                
-                if not addon_id or not version or not name:
-                    print(f"  ✗ {addon_path.name}: Missing required attributes")
-                    valid = False
+            for filename in files:
+                # Skip excluded files
+                if filename in EXCLUDED_FILES:
+                    continue
+                if filename.endswith(('.pyc', '.pyo', '.tmp', '.bak', '~')):
                     continue
                 
-                # Check if directory name matches addon ID
-                if addon_path.name != addon_id:
-                    print(f"  ⚠ {addon_path.name}: Directory name doesn't match addon ID ({addon_id})")
-                
-                print(f"  ✓ {addon_id} v{version}")
-                
-            except ET.ParseError as e:
-                print(f"  ✗ {addon_path.name}: XML parse error - {e}")
-                valid = False
-        
-        return valid
+                file_path = Path(root_dir) / filename
+                rel_path = file_path.relative_to(addon_path)
+                archive_path = f"{addon_id}/{rel_path}"
+                zipf.write(file_path, archive_path)
     
-    def run(self, skip_zips=False):
-        """Run the complete maintenance cycle"""
-        print("="*60)
-        print("EchoRepo Maintenance - Starting Update Cycle")
-        print("="*60 + "\n")
-        
-        # Find all addons
-        if not self.find_addons():
-            print("\n⚠ No addons found. Nothing to do.")
-            return False
-        
-        # Validate addons
-        if not self.validate_addons():
-            print("\n✗ Validation failed. Please fix errors before continuing.")
-            return False
-        
-        # Create zip files for each addon
-        if not skip_zips:
-            print("\nCreating addon zip files...")
-            for addon_path in self.addons:
-                self.create_addon_zip(addon_path)
-            
-            # Cleanup old zips
-            self.cleanup_old_zips()
-        else:
-            print("\nSkipping zip file creation (--skip-zips)")
-        
-        # Generate addons.xml
-        addons_xml_path = self.generate_addons_xml()
-        
-        # Generate MD5
-        self.generate_md5(addons_xml_path)
-        
-        # Generate report
-        self.generate_report()
-        
-        print("\n✓ Maintenance cycle complete!")
-        print("\nNext steps:")
-        print("1. Review the changes")
-        print("2. Test installation in Kodi")
-        print("3. Commit and push to GitHub:")
-        print("   git add .")
-        print(f"   git commit -m \"Update repository - {datetime.now().strftime('%Y-%m-%d')}\"")
-        print("   git push origin main")
-        
-        return True
+    # Copy assets to zip folder for Kodi addon browser display
+    for asset in ["addon.xml", "icon.png", "fanart.jpg"]:
+        src = addon_path / asset
+        if src.exists():
+            dst = zip_dir / asset
+            dst.write_bytes(src.read_bytes())
+    
+    size_kb = zip_path.stat().st_size / 1024
+    print(f"    Created {zip_name} ({size_kb:.1f} KB)")
+    return zip_path
 
+
+def generate_addons_xml(addon_elements):
+    """Generate addons.xml from list of addon root elements."""
+    root = ET.Element("addons")
+    for elem in addon_elements:
+        root.append(elem)
+    
+    # Pretty-print
+    ET.indent(root, space="    ")
+    
+    tree = ET.ElementTree(root)
+    tree.write(ADDONS_XML, encoding="UTF-8", xml_declaration=True)
+    
+    print(f"\n✓ Generated {ADDONS_XML.relative_to(REPO_ROOT)}")
+
+
+def generate_md5():
+    """Generate MD5 checksum for addons.xml."""
+    md5_hash = hashlib.md5()
+    with open(ADDONS_XML, "rb") as f:
+        md5_hash.update(f.read())
+    
+    checksum = md5_hash.hexdigest()
+    ADDONS_XML_MD5.write_text(checksum)
+    
+    print(f"✓ Generated {ADDONS_XML_MD5.relative_to(REPO_ROOT)}")
+    print(f"  MD5: {checksum}")
+
+
+def git_commit_and_push():
+    """Commit all changes and push to GitHub."""
+    print("\n=== Git Operations ===")
+    
+    # Check if in a git repo
+    result = subprocess.run(
+        ["git", "rev-parse", "--git-dir"],
+        cwd=REPO_ROOT, capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        print("⚠ Not a git repository. Skipping commit.")
+        return
+    
+    # Stage all changes
+    subprocess.run(["git", "add", "-A"], cwd=REPO_ROOT, check=True)
+    
+    # Check if there are staged changes
+    result = subprocess.run(
+        ["git", "diff", "--cached", "--quiet"],
+        cwd=REPO_ROOT, capture_output=True
+    )
+    if result.returncode == 0:
+        print("✓ No changes to commit")
+        return
+    
+    # Commit
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    commit_msg = f"Update repository - {timestamp}"
+    subprocess.run(["git", "commit", "-m", commit_msg], cwd=REPO_ROOT, check=True)
+    print(f"✓ Committed: {commit_msg}")
+    
+    # Push
+    try:
+        subprocess.run(
+            ["git", "push"],
+            cwd=REPO_ROOT, check=True, capture_output=True, text=True, timeout=30
+        )
+        print("✓ Pushed to GitHub")
+    except subprocess.CalledProcessError as e:
+        print(f"⚠ Push failed: {e.stderr}")
+        print("  Run 'git push' manually")
+    except subprocess.TimeoutExpired:
+        print("⚠ Push timed out - check your connection")
+
+
+def validate_only():
+    """Validate addon.xml files without making changes."""
+    print("=== Validation Mode ===\n")
+    
+    addon_folders = find_addon_folders()
+    if not addon_folders:
+        print("✗ No addon folders found")
+        return False
+    
+    all_valid = True
+    for addon_path in addon_folders:
+        try:
+            addon_id, version, name, _ = parse_addon_xml(addon_path)
+            
+            # Check directory name matches addon ID
+            if addon_path.name != addon_id:
+                print(f"⚠ {addon_path.name}: folder name != addon ID '{addon_id}'")
+            
+            # Check for required assets
+            missing = []
+            for asset in ["icon.png", "fanart.jpg"]:
+                if not (addon_path / asset).exists():
+                    missing.append(asset)
+            
+            if missing:
+                print(f"⚠ {addon_id} v{version}: missing {', '.join(missing)}")
+            else:
+                print(f"✓ {addon_id} v{version} ({name})")
+                
+        except Exception as e:
+            print(f"✗ {addon_path.name}: {e}")
+            all_valid = False
+    
+    print(f"\n{'✓ All addons valid' if all_valid else '✗ Validation failed'}")
+    return all_valid
+
+
+# === Main ===
 
 def main():
-    import argparse
+    no_commit = "--no-commit" in sys.argv
+    validate = "--validate" in sys.argv
     
-    parser = argparse.ArgumentParser(
-        description="Maintain Kodi repository - update addons.xml and create zips"
-    )
-    parser.add_argument(
-        "path",
-        nargs="?",
-        default=r"E:\EchoRepo",
-        help="Path to repository root (default: E:\\EchoRepo)"
-    )
-    parser.add_argument(
-        "--skip-zips",
-        action="store_true",
-        help="Skip creating zip files (only update addons.xml)"
-    )
-    parser.add_argument(
-        "--validate-only",
-        action="store_true",
-        help="Only validate addon.xml files without making changes"
-    )
+    if validate:
+        success = validate_only()
+        sys.exit(0 if success else 1)
     
-    args = parser.parse_args()
+    print("=" * 60)
+    print("EchoRepo Maintenance Script")
+    print("=" * 60 + "\n")
     
-    maintenance = RepoMaintenance(args.path)
+    # Ensure zips directory exists
+    ZIPS_DIR.mkdir(exist_ok=True)
     
-    if args.validate_only:
-        print("="*60)
-        print("Validation Mode")
-        print("="*60 + "\n")
-        maintenance.find_addons()
-        is_valid = maintenance.validate_addons()
-        print("\n" + ("✓ All addons valid" if is_valid else "✗ Validation failed"))
-        sys.exit(0 if is_valid else 1)
+    # Find addon folders
+    addon_folders = find_addon_folders()
+    if not addon_folders:
+        print("✗ No addon folders found (directories with addon.xml)")
+        sys.exit(1)
     
-    success = maintenance.run(skip_zips=args.skip_zips)
-    sys.exit(0 if success else 1)
+    print(f"Found {len(addon_folders)} addon(s):\n")
+    
+    addon_elements = []
+    for addon_path in addon_folders:
+        addon_id, version, name, root_elem = parse_addon_xml(addon_path)
+        print(f"• {addon_id} v{version}")
+        
+        # Create zip
+        create_addon_zip(addon_path, addon_id, version)
+        
+        # Collect element for addons.xml
+        addon_elements.append(root_elem)
+    
+    # Generate addons.xml and checksum
+    generate_addons_xml(addon_elements)
+    generate_md5()
+    
+    # Git operations
+    if no_commit:
+        print("\n✓ Skipped git operations (--no-commit)")
+    else:
+        git_commit_and_push()
+    
+    print("\n" + "=" * 60)
+    print("Repository update complete!")
+    print("=" * 60)
+    
+    # Show install URL
+    repo_addon = ZIPS_DIR / "repository.echostorm"
+    if repo_addon.exists():
+        zips = list(repo_addon.glob("repository.echostorm-*.zip"))
+        if zips:
+            zip_name = zips[0].name
+            print(f"\nInstall URL:")
+            print(f"https://raw.githubusercontent.com/Echo-Storm/EchoRepo/main/zips/repository.echostorm/{zip_name}")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n\nAborted.")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n✗ Error: {e}", file=sys.stderr)
+        sys.exit(1)

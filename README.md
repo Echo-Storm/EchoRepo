@@ -1,41 +1,91 @@
-# EchoRepo
+# Echo-Storm Kodi Repository
 
-Repository for Echo-Storm's custom Kodi addons, skins, and tools
+Personal Kodi addon repository.
 
 ## Installation
 
-### Method 1: Install from Zip File
+**Install from zip URL:**
+```
+https://raw.githubusercontent.com/Echo-Storm/EchoRepo/main/zips/repository.echostorm/repository.echostorm-1.0.2.zip
+```
 
-1. Download the latest repository zip: [`repository.echostorm-1.0.0.zip`](repository.echostorm-1.0.0.zip)
-2. In Kodi, navigate to **Settings → Add-ons → Install from zip file**
-3. Select the downloaded zip file
-4. Wait for the "Add-on installed" notification
+In Kodi: **Settings → Add-ons → Install from zip file → Enter URL**
 
-### Method 2: File Manager Source (Advanced)
+## Repository Structure
 
-1. In Kodi, go to **Settings → File Manager → Add source**
-2. Enter the repository URL: `https://raw.githubusercontent.com/Echo-Storm/EchoRepo/main`
-3. Name it "EchoRepo"
-4. Go to **Add-ons → Install from zip file**
-5. Select "EchoRepo" and install `repository.echostorm-1.0.0.zip`
+```
+/repository.echostorm/       # Repository addon source
+    addon.xml
+    icon.png                 # 512x512
+    fanart.jpg               # 1920x1080
+    
+/your-other-addon/           # Other addon sources (one folder per addon)
+    addon.xml
+    icon.png
+    fanart.jpg
+    resources/
+    lib/
+    ...
 
-## Included Add-ons
+/zips/                       # Auto-generated (DO NOT edit manually)
+    addons.xml               # Master index
+    addons.xml.md5           # Checksum
+    /repository.echostorm/   # Repo addon zip + assets
+    /your-other-addon/       # Other addon zips + assets
 
-This repository hosts the following add-ons:
+/update_repo.py              # Maintenance script
+/README.md
+```
 
-- **weather.kodiweather** - Enhanced weather addon with NWS alerts and NEXRAD radar
-- **resource.images.weatherfanart.echo** - Weather fanart collection
-- More add-ons coming soon...
+## Adding a New Addon
 
-## Maintenance
+1. Create a folder in repo root: `/plugin.video.myaddon/`
+2. Add required files:
+   - `addon.xml` (manifest)
+   - `icon.png` (512×512)
+   - `fanart.jpg` (1920×1080)
+   - Your addon code
+3. Run the update script:
+   ```bash
+   python3 update_repo.py
+   ```
 
-This repository is automatically maintained using Python scripts. See `update_repo.py` for details.
+## Updating an Existing Addon
 
-## Author
+1. Edit the addon code in its folder
+2. Bump the `version` in `addon.xml`
+3. Run:
+   ```bash
+   python3 update_repo.py
+   ```
 
-**Echo-Storm**  
-GitHub: [@Echo-Storm](https://github.com/Echo-Storm)
+## Script Options
 
-## License
+```bash
+# Full update: generate zips, commit, push
+python3 update_repo.py
 
-Individual add-ons may have their own licenses. Please check each add-on's directory for details.
+# Generate files only, no git operations
+python3 update_repo.py --no-commit
+
+# Validate addon.xml files only
+python3 update_repo.py --validate
+```
+
+## What the Script Does
+
+1. Scans repo root for folders containing `addon.xml`
+2. Parses each `addon.xml` to extract ID and version
+3. Creates zip at `zips/{addon_id}/{addon_id}-{version}.zip`
+4. Copies assets (addon.xml, icon.png, fanart.jpg) to zip folder
+5. Generates `zips/addons.xml` with all found addons
+6. Generates `zips/addons.xml.md5` checksum
+7. Commits and pushes to GitHub (unless `--no-commit`)
+
+## Verification URLs
+
+After pushing, these should all be accessible:
+
+- **Install zip:** `https://raw.githubusercontent.com/Echo-Storm/EchoRepo/main/zips/repository.echostorm/repository.echostorm-1.0.2.zip`
+- **Addons index:** `https://raw.githubusercontent.com/Echo-Storm/EchoRepo/main/zips/addons.xml`
+- **Checksum:** `https://raw.githubusercontent.com/Echo-Storm/EchoRepo/main/zips/addons.xml.md5`
