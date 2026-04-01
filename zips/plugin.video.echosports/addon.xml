@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="plugin.video.echosports"
+       name="Echo Sports"
+       version="0.6.7"
+       provider-name="Echo-Storm">
+    <requires>
+        <import addon="xbmc.python" version="3.0.0"/>
+        <import addon="script.module.requests" version="2.22.0"/>
+        <import addon="script.module.six" version="1.15.0"/>
+        <import addon="script.module.resolveurl" version="5.1.0" optional="true"/>
+        <import addon="inputstream.adaptive" version="21.0.0" optional="true"/>
+    </requires>
+    <extension point="xbmc.python.pluginsource" library="main.py">
+        <provides>video</provides>
+    </extension>
+    <extension point="xbmc.addon.metadata">
+        <platform>all</platform>
+        <summary lang="en_GB">Private sports streaming addon</summary>
+        <description lang="en_GB">A private sports addon for live events and replays. Supports NFL, golf, racing, boxing, UFC, MMA, wrestling (1700+ items). Personal use only.</description>
+        <disclaimer lang="en_GB">This addon is for personal use only. The developers are not responsible for any misuse.</disclaimer>
+        <license>Private</license>
+        <forum></forum>
+        <website></website>
+        <source></source>
+        <assets>
+            <icon>resources/icon.png</icon>
+            <fanart>resources/fanart.jpg</fanart>
+        </assets>
+        <news>
+v0.6.7 (2026-03-31)
+- NEW: Racing/Motorsport section (PitSport integration)
+- Supports MotoGP, IndyCar, IndyNXT, F1, and more
+- Live Now and Schedule views for motorsport events
+- Stream resolution with HLS/inputstream.adaptive support
+
+v0.6.6 (2026-03-31)
+- FIXED: ResolveURL Settings menu item now works properly
+- Added ResolveURL Settings to main menu (yellow highlighted)
+- Fixed settings items not being marked as playable (was causing Kodi errors)
+- Added debug logging for ResolveURL settings action
+
+v0.6.5 (2026-03-31)
+- FIXED: Dead link detection now actually works (was creating new resolver instance losing error state)
+- Added debug logging: "last_error=dead_link" visible in log on failure
+
+v0.6.4 (2026-03-31)
+- FIXED: "Open ResolveURL Settings" button now works (uses Addon.OpenSettings)
+- IMPROVED: Dead link detection - shows "Link Dead / Removed" for 404 errors
+- NOTE: Some 23/24 season content has broken feed URLs (upstream issue)
+- NOTE: Some Mega.nz links are dead (uploader removed files)
+
+v0.6.3 (2026-03-30)
+- ADDED: "Open ResolveURL Settings" button in addon settings
+- ADDED: Debrid status checking with clear error messages
+- IMPROVED: Better logging for ResolveURL resolution debugging
+- IMPROVED: Smarter error dialogs (tells you if debrid not configured vs auth failed)
+
+v0.6.2 (2026-03-30)
+- FIXED: NFL parsing now uses requests library (same as working FOD)
+- Fixed 23/24 season URL path
+- Simplified regex patterns for better Windows compatibility
+
+v0.6.1 (2026-03-30)
+- MOVED: NFL Replays now under NFL menu (NFL → Live NFL / NFL Replays)
+- FIXED: Added debug logging for NFL feed parsing
+- Better error messages if no content found
+
+v0.6.0 (2026-03-30)
+- NEW: NFL Replays section (full &amp; condensed games)
+- Integrated NFL Rewind feeds from mylostsoulspace.co.uk
+- Seasons: 23/24, 24/25, 25/26
+- Includes regular season weeks + playoffs (Wildcard, Divisional, Conference, Pro Bowl, Super Bowl)
+- All content requires debrid (Real-Debrid/Premiumize/AllDebrid)
+
+v0.5.2 (2026-03-30)
+- FIXED magnet links being misdetected as direct streams
+- Bug: magnets with .mp4/.mkv in display name (dn=) were skipping ResolveURL
+- Now checks magnet:/mega BEFORE checking file extensions
+
+v0.5.1 (2026-03-30)
+- IMPROVED FOD playback error handling
+- Better error messages for debrid-required links (magnets, mega.nz)
+- Added yt-dlp fallback for non-debrid hosters (luluvdo, luluvid)
+- Shows dialog explaining debrid requirements when magnet/mega links fail
+
+v0.5.0 (2026-03-30)
+- BOXING/MMA SECTION ADDED: Integrated Fights on Demand content
+  - UFC: PPV, Fight Night, ESPN, ABC, BJJ, Classic events
+  - MMA: ONE, Bellator, PFL, Karate Combat, and more
+  - Boxing: Current events and classics
+  - Free (Non-Debrid) sections for each category
+- Links are magnets and mega.nz (require ResolveURL + debrid for best results)
+- Context menu shows backup streams when multiple links available
+
+v0.4.1 (2026-03-30)
+- FIXED settings.xml labels not displaying (was using undefined string IDs)
+- Settings now show: "Use ResolveURL for Debrid/Hosters" toggle + debug logging
+
+v0.4.0 (2026-03-30)
+- REMOVED broken yt-dlp addon dependency
+- REPLACED custom Real-Debrid with ResolveURL integration
+- ResolveURL handles debrid (RD/PM/AD) + site resolvers (dood, streamtape, etc.)
+- Added icon/fanart asset hooks to addon.xml
+- Changelog and handoff now included in zip
+- System yt-dlp support: if yt-dlp is in PATH, it will be used as fallback
+- Wrestling streams: direct CDN streams work; hosted streams need ResolveURL
+
+v0.3.5 (2026-03-30)
+- Wrestling section refinements
+
+v0.3.0 (2026-03-30)
+- WRESTLING SECTION ADDED: 1700+ items integrated from Wrestling on Demand
+  - WWE (RAW 457 eps, SmackDown 435 eps, NXT, WrestleMania, PPVs)
+  - AEW, TNA, NWA, NJPW, ROH, Independent (544 items)
+  - Live 24/7 channels
+  - Documentaries, Interviews, Special Matches, Movies/TV, Archive
+
+v0.2.1 (2026-03-29)
+- Simplified UI: go directly to events (removed broken source selection)
+- Verified 5/5 stream resolution success rate
+- Disabled Sportsfire (decryption not working with modified APK)
+
+v0.2.0 (2026-03-29)
+- LeagueDo streams NOW WORKING - cracked wilderness.click decryption
+- Full stream resolution: LeagueDo -> glisco/sansat/upstor -> wilderness.click -> m3u8
+- Added wilderness.click decoder (custom base64 chunk reorder algorithm)
+
+v0.1.0 (2026-03-29)
+- Initial release
+- super.league.do live events scraper
+- Sportsfire API integration (schedule works, stream decryption pending)
+- Embed resolvers for multiple streaming domains
+- Event caching system
+        </news>
+    </extension>
+</addon>

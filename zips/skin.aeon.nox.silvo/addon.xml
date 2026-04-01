@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<addon id="skin.aeon.nox.silvo" version="40.0.5" name="Aeon Nox: SiLVO - Echostorm Edition" provider-name="Echo-Storm">
+	<requires>
+		<import addon="xbmc.gui" version="5.17.0" />
+		<import addon="script.skinshortcuts" version="2.0.1" />
+		<import addon="resource.images.studios.white" version="0.0.1" />
+		<import addon="resource.images.recordlabels.white" version="0.0.1" />
+	</requires>
+	<extension point="xbmc.gui.skin" debugging="false">
+		<res width="1920" height="1080" aspect="16:9" default="true" folder="16x9" />
+	</extension>
+	<extension point="xbmc.addon.metadata">
+		<summary lang="en_US">Echostorm Edition - Private Release</summary>
+		<summary lang="en_GB">Echostorm Edition - Private Release</summary>
+		<summary lang="en_AU">Echostorm Edition - Private Release</summary>
+		<summary lang="en_NZ">Echostorm Edition - Private Release</summary>
+		<description lang="en_US">Aeon Nox: SiLVO - Echostorm Edition[CR][CR]Based on Aeon Nox by BigNoid, modded by SiLVO, widgets by Mr. V.[CR]Customized and maintained by Echo-Storm for private use.</description>
+		<platform>all</platform>
+		<license>CC BY-NC-SA 4.0</license>
+		<website>https://github.com/Echo-Storm</website>
+		<source>https://github.com/Echo-Storm/EchoRepo</source>
+		<assets>
+			<icon>resources/icon.png</icon>
+			<fanart>resources/fanart.jpg</fanart>
+		</assets>
+		<news>[I][COLOR FFFF9800]v40.0.5 - Echostorm Edition[/COLOR][/I][CR]- Packed textures for faster loading[CR]- Trimmed extras for smaller footprint[CR]- Private release</news>
+	</extension>
+</addon>
