@@ -174,17 +174,19 @@ class LeagueDoSource(BaseSource):
                 # Skip if doesn't match sport filter
                 if not self._matches_sport(match, sport):
                     continue
+                
+                # Extract team info (handle None values)
+                team1 = match.get('team1') or ''
+                team2 = match.get('team2') or ''
                     
                 # Generate a unique ID
-                event_id = f"ld_{idx}_{match.get('team1', '')[:3]}_{match.get('team2', '')[:3]}"
+                event_id = f"ld_{idx}_{team1[:3]}_{team2[:3]}"
                 
-                # Extract team info
-                team1 = match.get('team1', '')
-                team2 = match.get('team2', '')
+                # Build display name
                 name = f"{team1} vs {team2}" if team1 and team2 else team1 or "Unknown Event"
                 
                 # Parse timestamp
-                start_timestamp = match.get('startTimestamp', 0)
+                start_timestamp = match.get('startTimestamp', 0) or 0
                 if isinstance(start_timestamp, str):
                     start_timestamp = int(start_timestamp)
                     
@@ -195,15 +197,17 @@ class LeagueDoSource(BaseSource):
                     start_time = start_timestamp
                     
                 # Duration for live check
-                duration = match.get('duration', 120)  # Default 2 hours
+                duration = match.get('duration', 120) or 120  # Default 2 hours
                 duration_ms = duration * 60 * 1000
                 
                 # Check if live
                 is_live = start_timestamp <= now_ms <= (start_timestamp + duration_ms)
                 
-                # Extract channels/links
+                # Extract channels/links (handle None value)
+                # Collect BOTH 'links' and 'oldLinks' for full fallback coverage
                 channels = []
-                for ch in match.get('channels', []):
+                raw_channels = match.get('channels') or []
+                for ch in raw_channels:
                     if isinstance(ch, str):
                         # Just a channel name string
                         channels.append({
@@ -212,9 +216,14 @@ class LeagueDoSource(BaseSource):
                             'language': 'EN',
                         })
                     elif isinstance(ch, dict):
+                        # Collect links from both arrays: 'links' first (primary), then 'oldLinks' (fallback)
+                        all_links = []
+                        all_links.extend(ch.get('links', []))
+                        all_links.extend(ch.get('oldLinks', []))
+                        
                         channels.append({
                             'name': ch.get('name', 'Unknown'),
-                            'links': ch.get('links', []),
+                            'links': all_links,  # Combined list in priority order
                             'language': ch.get('language', 'EN'),
                         })
                         
@@ -275,30 +284,36 @@ class LeagueDoSource(BaseSource):
         for channel in event.get('channels', []):
             channel_name = channel.get('name', 'Unknown')
             language = channel.get('language', 'EN')
+            links = channel.get('links', [])
             
-            for link in channel.get('links', []):
+            # Bundle ALL links for this channel into one stream entry
+            # Router will try them in order automatically
+            valid_links = []
+            for link in links:
                 if isinstance(link, str):
-                    stream_url = link
-                else:
-                    continue
-                    
-                # Determine resolver type
-                if any(x in stream_url for x in ['.m3u8', '/live/', '/hls/']):
-                    resolver = 'direct'
-                elif any(x in stream_url for x in ['dabac', 'sansat', 'istorm', 'zvision', 
-                                                    'glisco', 'bedsport', 'coolrea', 
-                                                    'evfancy', 's2watch', 'vuen', 'gopst']):
-                    resolver = 'embed'
-                else:
-                    resolver = 'direct'
-                    
-                streams.append({
-                    'name': channel_name,
-                    'url': stream_url,
-                    'quality': 'HD',
-                    'language': language,
-                    'resolver': resolver,
-                })
+                    valid_links.append(link)
+            
+            if not valid_links:
+                continue
+                
+            # Determine resolver type from first link
+            first_url = valid_links[0]
+            if any(x in first_url for x in ['.m3u8', '/live/', '/hls/']):
+                resolver = 'direct'
+            elif any(x in first_url for x in ['dabac', 'sansat', 'istorm', 'zvision', 
+                                                'glisco', 'bedsport', 'coolrea', 
+                                                'evfancy', 's2watch', 'vuen', 'gopst', 'upstor']):
+                resolver = 'embed'
+            else:
+                resolver = 'direct'
+                
+            streams.append({
+                'name': channel_name,
+                'urls': valid_links,  # List of ALL fallback URLs
+                'quality': 'HD',
+                'language': language,
+                'resolver': resolver,
+            })
                 
         xbmc.log(f"[LeagueDo] Found {len(streams)} streams for event {event_id}", xbmc.LOGINFO)
         return streams

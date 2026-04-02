@@ -4,6 +4,52 @@ All notable changes to plugin.video.echosports are documented here.
 
 ---
 
+## [0.6.17] - 2026-04-01
+
+### Fixed
+- **RBLive77 stream fetching** - Resolved 400 Bad Request errors
+  - Now extracts `streamId` from match field 150
+  - Stream detail API includes required `streamId` parameter
+  - Proper match data flow: field 150 → event._raw.stream_id → API call
+
+### Added
+- Protobuf response handling for stream detail endpoint (supports both JSON and protobuf)
+- Debug logging for fields 100 and 150 during match parsing
+- Comprehensive streamId extraction and usage logging
+
+### Technical
+- Modified `_parse_event()` to extract and store field 150 as `stream_id`
+- Updated `get_streams()` to pass `stream_id` to `_fetch_stream_detail()`
+- Updated `_fetch_stream_detail()` to accept `stream_id` parameter and include it in API URL
+- Added protobuf content-type detection in stream detail response handling
+
+---
+
+## [0.6.8] - 2026-04-01
+
+### Added
+- **RBLive77 integration** - New live sports source via protobuf API
+  - Basketball, Tennis, Baseball, Football, Badminton, Volleyball
+  - trex:// URL resolution (field 120 stream bypass)
+  - No decryption required - direct CDN stream access
+  - New menu item: "RBLive77 Live Sports" (orange colored)
+- New file: `lib/sources/rblive77.py`
+- Full API documentation in `RBLIVE77_NOTES.md`
+
+### Technical
+- Implements BaseSource interface with protobuf/JSON API support
+- trex:// protocol conversion: `trex://domain/path` → `https://domain/path` → actual stream URL
+- Required headers: origin, referer, custom user-agent for playback
+- Fallback sfver hash rotation if primary API endpoint fails
+- Supports API responses in both protobuf and JSON formats
+
+### Notes
+- Field 4 encrypted stream token not implemented (field 120 bypass works)
+- streamId determination still needs investigation (may limit available matches)
+- Sport type gaps (5-11) exist - boxing, MMA, NHL, golf, racing IDs unknown
+
+---
+
 ## [0.6.7] - 2026-03-31
 
 ### Added

@@ -198,7 +198,7 @@
             </menu>
         </extension>
     </addon>
-    <addon id="plugin.video.echosports" name="Echo Sports" version="0.6.7" provider-name="Echo-Storm">
+    <addon id="plugin.video.echosports" name="Echo Sports" version="0.7.0" provider-name="Echo-Storm">
         <requires>
             <import addon="xbmc.python" version="3.0.0" />
             <import addon="script.module.requests" version="2.22.0" />
@@ -223,110 +223,142 @@
                 <fanart>resources/fanart.jpg</fanart>
             </assets>
             <news>
+v0.7.0 (2026-04-01) - STABLE RELEASE
+- MAJOR: Automatic stream fallback - tries all available sources until one works
+- User clicks once, addon automatically retries failed sources with progress notifications
+- LeagueDo: Full fallback support (glisco → sansat → upstor domains)
+- Optimized timeouts (8s per attempt) for responsive failure detection
+- Detailed timing logs for debugging stream issues
+- Cleaned UI: Removed work-in-progress features for stable release
+
+WORKING SOURCES:
+✓ Live Sports (LeagueDo) - Auto-fallback across 3 embed domains
+✓ Wrestling - 1,700+ events (transparent integration)
+✓ Boxing/MMA - Fights on Demand (requires Real-Debrid)
+✓ NFL Replays - Full &amp; condensed games (requires Real-Debrid)
+✓ Racing/Motorsport - PitSport integration
+✓ Multiple sports categories (NFL, NBA, NHL, MLB, Golf, Combat)
+
+TECHNICAL:
+- Fixed critical DirectResolver fallback bug that caused 60+ second hangs
+- Proper resolver type detection (embed vs direct vs debrid)
+- JSON-encoded URL lists for multi-link streams
+- Backwards compatible with single-URL stream format
+- All embed domains: dabac, sansat, istorm, zvision, upstor, wilderness
+
+--- Previous Development Versions ---
+
+v0.6.30 (2026-04-01)
+- CRITICAL FIX: Fallback retry loop was broken - DirectResolver fallback caused Kodi to hang
+- Changed: Only use DirectResolver when resolver type is 'direct', not as fallback for failed embeds
+- Added: Detailed timing logs showing exactly how long each attempt takes
+- Logs now show: "Attempt 2/3 FAILED in 8.2s" or "Attempt 3/3 SUCCESS in 2.1s"
+
+v0.6.29 (2026-04-01)
+- MAJOR: Automatic fallback link retry - tries all sources until one works
+- Shows "Trying fallback source (2/3)" notifications during retry attempts
+- Timeouts set to 8s (was 6s in v0.6.28) - better balance for slow embeds
+- Stream list simplified: one entry per channel instead of one per domain
+- Example: "TNT Sports 2" auto-tries glisco → sansat → upstor until success
+
+v0.6.28 (2026-04-01)
+- Reduced all embed resolver timeouts for faster fallback attempts
+- Main/API/iframe calls: 6s (was 8/10/15s), HEAD checks: 3s (was 5s)
+- With multiple fallback links, faster fail-over means less wait between attempts
+
+v0.6.27 (2026-04-01)
+- FIXED: LeagueDo now uses ALL available fallback links (both 'links' and 'oldLinks')
+- Stream names now show domain (e.g., "TNT Sports 2 [sansat]") when multiple links exist
+- Enables automatic fallback: glisco → sansat → upstor
+- Added 'upstor' to embed resolver domain support
+
+v0.6.26 (2026-04-01)
+- Added dead domain blacklist (glisco.link currently offline)
+- Fast-fail with helpful notification instead of 15-second timeout
+- Reduced embed resolver timeout from 15s to 8s
+- NOTE: LeagueDo streams currently use glisco.link which is down
+
+v0.6.25 (2026-04-01)
+- FIXED: LeagueDo parsing crash on events with null team/channel data
+- FIXED: Restored ResolveURL Settings to main menu (addon settings button is broken)
+- Properly handles JSON fields that are explicitly null vs missing
+
+v0.6.24 (2026-04-01)
+- FIXED: Wrestling titles showing raw color tags ([COLOR white ]RAW[COLORsnow])
+- Fixed strip_color_tags regex to handle malformed upstream XML tags
+- Clarified menu: "Live Events" renamed to "Live Sports (LeagueDo)"
+- Marked RBLive77 as WIP in menu (protobuf parsing incomplete)
+- Code cleanup: removed WOD branding from comments
+
+v0.6.23 (2026-04-01)
+- RBLive77: Attempted protobuf parser fix (still blocked on array parsing)
+
+v0.6.22 (2026-04-01)
+- RBLive77: Check for DOUBLE nesting - field 10.1.X may contain matches
+- Added deeper structure logging
+
+v0.6.21 (2026-04-01)
+- RBLive77: Handle protobuf vs JSON format differences
+- Protobuf returns dict with numbered keys, not arrays
+
+v0.6.20 (2026-04-01)
+- RBLive77: Parse field 10.1 as array
+- Collects ALL streamIds from fields 150-170
+
+v0.6.19 (2026-04-01)
+- RBLive77: FIXED streamId detection - checks fields 150-153 (varies by sport)
+
+v0.6.18 (2026-04-01)
+- RBLive77: FIXED crash - embedded null character in field 100 logging
+
+v0.6.17 (2026-04-01)
+- RBLive77: FIXED stream fetching - extracts streamId from match field 150
+
+v0.6.9 (2026-04-01)
+- Fixed protobuf parsing - added custom wire format parser
+
+v0.6.8 (2026-04-01)
+- Added RBLive77 live sports integration
+
 v0.6.7 (2026-03-31)
 - NEW: Racing/Motorsport section (PitSport integration)
-- Supports MotoGP, IndyCar, IndyNXT, F1, and more
-- Live Now and Schedule views for motorsport events
-- Stream resolution with HLS/inputstream.adaptive support
 
 v0.6.6 (2026-03-31)
 - FIXED: ResolveURL Settings menu item now works properly
-- Added ResolveURL Settings to main menu (yellow highlighted)
-- Fixed settings items not being marked as playable (was causing Kodi errors)
-- Added debug logging for ResolveURL settings action
 
 v0.6.5 (2026-03-31)
-- FIXED: Dead link detection now actually works (was creating new resolver instance losing error state)
-- Added debug logging: "last_error=dead_link" visible in log on failure
+- FIXED: Dead link detection now works (was creating new resolver instance)
 
 v0.6.4 (2026-03-31)
-- FIXED: "Open ResolveURL Settings" button now works (uses Addon.OpenSettings)
-- IMPROVED: Dead link detection - shows "Link Dead / Removed" for 404 errors
-- NOTE: Some 23/24 season content has broken feed URLs (upstream issue)
-- NOTE: Some Mega.nz links are dead (uploader removed files)
+- FIXED: ResolveURL settings button
+- IMPROVED: Dead link detection for 404 errors
 
 v0.6.3 (2026-03-30)
-- ADDED: "Open ResolveURL Settings" button in addon settings
-- ADDED: Debrid status checking with clear error messages
-- IMPROVED: Better logging for ResolveURL resolution debugging
-- IMPROVED: Smarter error dialogs (tells you if debrid not configured vs auth failed)
+- Added debrid status checking with clear error messages
 
 v0.6.2 (2026-03-30)
-- FIXED: NFL parsing now uses requests library (same as working FOD)
-- Fixed 23/24 season URL path
-- Simplified regex patterns for better Windows compatibility
+- FIXED: NFL parsing now uses requests library
 
 v0.6.1 (2026-03-30)
-- MOVED: NFL Replays now under NFL menu (NFL → Live NFL / NFL Replays)
-- FIXED: Added debug logging for NFL feed parsing
-- Better error messages if no content found
+- MOVED: NFL Replays now under NFL menu
 
 v0.6.0 (2026-03-30)
 - NEW: NFL Replays section (full &amp; condensed games)
-- Integrated NFL Rewind feeds from mylostsoulspace.co.uk
-- Seasons: 23/24, 24/25, 25/26
-- Includes regular season weeks + playoffs (Wildcard, Divisional, Conference, Pro Bowl, Super Bowl)
-- All content requires debrid (Real-Debrid/Premiumize/AllDebrid)
-
-v0.5.2 (2026-03-30)
-- FIXED magnet links being misdetected as direct streams
-- Bug: magnets with .mp4/.mkv in display name (dn=) were skipping ResolveURL
-- Now checks magnet:/mega BEFORE checking file extensions
-
-v0.5.1 (2026-03-30)
-- IMPROVED FOD playback error handling
-- Better error messages for debrid-required links (magnets, mega.nz)
-- Added yt-dlp fallback for non-debrid hosters (luluvdo, luluvid)
-- Shows dialog explaining debrid requirements when magnet/mega links fail
 
 v0.5.0 (2026-03-30)
-- BOXING/MMA SECTION ADDED: Integrated Fights on Demand content
-  - UFC: PPV, Fight Night, ESPN, ABC, BJJ, Classic events
-  - MMA: ONE, Bellator, PFL, Karate Combat, and more
-  - Boxing: Current events and classics
-  - Free (Non-Debrid) sections for each category
-- Links are magnets and mega.nz (require ResolveURL + debrid for best results)
-- Context menu shows backup streams when multiple links available
-
-v0.4.1 (2026-03-30)
-- FIXED settings.xml labels not displaying (was using undefined string IDs)
-- Settings now show: "Use ResolveURL for Debrid/Hosters" toggle + debug logging
+- BOXING/MMA SECTION: Integrated Fights on Demand content
 
 v0.4.0 (2026-03-30)
-- REMOVED broken yt-dlp addon dependency
 - REPLACED custom Real-Debrid with ResolveURL integration
-- ResolveURL handles debrid (RD/PM/AD) + site resolvers (dood, streamtape, etc.)
-- Added icon/fanart asset hooks to addon.xml
-- Changelog and handoff now included in zip
-- System yt-dlp support: if yt-dlp is in PATH, it will be used as fallback
-- Wrestling streams: direct CDN streams work; hosted streams need ResolveURL
-
-v0.3.5 (2026-03-30)
-- Wrestling section refinements
 
 v0.3.0 (2026-03-30)
-- WRESTLING SECTION ADDED: 1700+ items integrated from Wrestling on Demand
-  - WWE (RAW 457 eps, SmackDown 435 eps, NXT, WrestleMania, PPVs)
-  - AEW, TNA, NWA, NJPW, ROH, Independent (544 items)
-  - Live 24/7 channels
-  - Documentaries, Interviews, Special Matches, Movies/TV, Archive
-
-v0.2.1 (2026-03-29)
-- Simplified UI: go directly to events (removed broken source selection)
-- Verified 5/5 stream resolution success rate
-- Disabled Sportsfire (decryption not working with modified APK)
+- WRESTLING SECTION: 1700+ items integrated
 
 v0.2.0 (2026-03-29)
-- LeagueDo streams NOW WORKING - cracked wilderness.click decryption
-- Full stream resolution: LeagueDo -&gt; glisco/sansat/upstor -&gt; wilderness.click -&gt; m3u8
-- Added wilderness.click decoder (custom base64 chunk reorder algorithm)
+- LeagueDo streams working - wilderness.click decryption
 
 v0.1.0 (2026-03-29)
 - Initial release
-- super.league.do live events scraper
-- Sportsfire API integration (schedule works, stream decryption pending)
-- Embed resolvers for multiple streaming domains
-- Event caching system
         </news>
         </extension>
     </addon>

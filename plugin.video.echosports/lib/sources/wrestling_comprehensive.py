@@ -1,16 +1,15 @@
 """
-Comprehensive Transparent Wrestling Integration for plugin.video.echosports
+Comprehensive Wrestling Content Source for plugin.video.echosports
 
-This integrates ALL Wrestling on Demand content seamlessly into your wrestling category
-with NO extra menus or branding - it should feel like native content.
-
-Full content coverage:
+Provides organized wrestling content including:
 - WWE (RAW, SmackDown, NXT, WrestleMania, PPVs, documentaries)
 - AEW (All Elite Wrestling)
 - Other Promotions (TNA, NWA, NJPW, ROH, RPW, Indy)
 - Live streams (24/7 channels + live events)
 - Documentaries & Interviews
 - Special matches & archives
+
+Content sourced from public XML feeds.
 """
 
 import xml.etree.ElementTree as ET
@@ -22,8 +21,10 @@ from datetime import datetime
 
 class WrestlingContentSource:
     """
-    Comprehensive wrestling content source that transparently integrates
-    all Wrestling on Demand feeds into a native-feeling structure.
+    Comprehensive wrestling content source.
+    
+    Fetches and parses wrestling content from XML feeds,
+    organized into a clean category structure.
     """
     
     BASE_URL = "https://l3grthu.com/hades/wod21"
@@ -203,13 +204,33 @@ class WrestlingContentSource:
         return url, headers
     
     def strip_color_tags(self, text: str) -> str:
-        """Strip Kodi color/formatting tags from text."""
-        text = re.sub(r'\[COLOR\s+\w+\]', '', text, flags=re.IGNORECASE)
+        """
+        Strip Kodi color/formatting tags from text.
+        
+        Handles malformed tags from upstream XML feeds like:
+        - [COLOR white ] (space before bracket)
+        - [COLORsnow] (missing / in closing tag)
+        - Standard [COLOR xxx] and [/COLOR]
+        """
+        # Handle standard and malformed opening color tags: [COLOR xxx], [COLOR xxx ]
+        text = re.sub(r'\[COLOR\s*\w*\s*\]', '', text, flags=re.IGNORECASE)
+        # Handle standard closing: [/COLOR]
         text = re.sub(r'\[/COLOR\]', '', text, flags=re.IGNORECASE)
-        text = re.sub(r'\[B\]', '', text, flags=re.IGNORECASE)
-        text = re.sub(r'\[/B\]', '', text, flags=re.IGNORECASE)
-        text = re.sub(r'\[I\]', '', text, flags=re.IGNORECASE)
-        text = re.sub(r'\[/I\]', '', text, flags=re.IGNORECASE)
+        # Handle malformed closing (no slash): [COLORxxx] where xxx is the "leftover" text
+        # Pattern: [COLOR followed by lowercase letters at end of string or before next tag
+        text = re.sub(r'\[COLOR([a-z]+)\]', r'\1', text, flags=re.IGNORECASE)
+        # Bold tags
+        text = re.sub(r'\[/?B\]', '', text, flags=re.IGNORECASE)
+        # Italic tags
+        text = re.sub(r'\[/?I\]', '', text, flags=re.IGNORECASE)
+        # Uppercase tags
+        text = re.sub(r'\[/?UPPERCASE\]', '', text, flags=re.IGNORECASE)
+        # Lowercase tags
+        text = re.sub(r'\[/?LOWERCASE\]', '', text, flags=re.IGNORECASE)
+        # CR (carriage return) tags
+        text = re.sub(r'\[/?CR\]', '', text, flags=re.IGNORECASE)
+        # Clean up any remaining broken tags
+        text = re.sub(r'\[COLOR[^\]]*\]', '', text, flags=re.IGNORECASE)
         return text.strip()
     
     # === High-level content retrieval methods ===

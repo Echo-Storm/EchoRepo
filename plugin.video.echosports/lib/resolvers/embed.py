@@ -30,6 +30,12 @@ class EmbedResolver:
         'wilderness', 'upstor'
     ]
     
+    # Dead/broken embed domains - skip these entirely
+    # Updated 2026-04-01: glisco.link timing out
+    DEAD_DOMAINS = [
+        'glisco.link',
+    ]
+    
     def __init__(self):
         self._session = requests.Session()
         self._headers = {
@@ -38,6 +44,11 @@ class EmbedResolver:
             'Accept-Language': 'en-US,en;q=0.5',
         }
         self._last_referer = None
+        
+    def is_dead_domain(self, url: str) -> bool:
+        """Check if URL uses a known dead/broken domain."""
+        url_lower = url.lower()
+        return any(dead in url_lower for dead in self.DEAD_DOMAINS)
         
     def can_resolve(self, url: str) -> bool:
         """Check if this resolver can handle the URL."""
@@ -62,18 +73,23 @@ class EmbedResolver:
             url = 'https:' + url
         elif not url.startswith('http'):
             url = 'https://' + url
+        
+        # Check for dead domains - fail fast
+        if self.is_dead_domain(url):
+            xbmc.log(f"[EmbedResolver] Skipping dead domain: {url[:60]}", xbmc.LOGWARNING)
+            return None
             
         self._last_referer = referer or self._extract_referer(url)
         
         xbmc.log(f"[EmbedResolver] Resolving: {url[:80]}", xbmc.LOGDEBUG)
         
         try:
-            # First, fetch the embed page
+            # First, fetch the embed page (reduced timeout from 15 to 8)
             headers = self._headers.copy()
             if self._last_referer:
                 headers['Referer'] = self._last_referer
                 
-            response = self._session.get(url, headers=headers, timeout=15)
+            response = self._session.get(url, headers=headers, timeout=8)
             response.raise_for_status()
             html = response.text
             
@@ -140,7 +156,7 @@ class EmbedResolver:
             headers = self._headers.copy()
             headers['Referer'] = url
             
-            response = self._session.get(api_url, headers=headers, timeout=10)
+            response = self._session.get(api_url, headers=headers, timeout=8)
             data = response.text
             
             # Try to parse as JSON
@@ -180,7 +196,7 @@ class EmbedResolver:
             headers = self._headers.copy()
             headers['Referer'] = url
             
-            response = self._session.get(embed_script_url, headers=headers, timeout=10)
+            response = self._session.get(embed_script_url, headers=headers, timeout=8)
             embed_script = response.text
             
             # Find the player URL pattern
@@ -189,7 +205,7 @@ class EmbedResolver:
                 player_base = match.group(1)
                 player_url = f"{player_base}=desktop&live={vid}"
                 
-                response = self._session.get(player_url, headers=headers, timeout=10)
+                response = self._session.get(player_url, headers=headers, timeout=8)
                 player_data = response.text
                 
                 # Extract stream URL
@@ -310,7 +326,7 @@ class EmbedResolver:
             base_url = self._extract_referer(url)
             lookup_url = urljoin(base_url, f'/server_lookup.php?channel_id={quote_plus(channel_key)}')
             
-            response = self._session.get(lookup_url, headers=headers, timeout=10)
+            response = self._session.get(lookup_url, headers=headers, timeout=8)
             
             # Extract server_key
             try:
@@ -381,7 +397,7 @@ class EmbedResolver:
             headers = self._headers.copy()
             headers['Referer'] = referer
             
-            response = self._session.get(iframe_url, headers=headers, timeout=15)
+            response = self._session.get(iframe_url, headers=headers, timeout=8)
             html = response.text
             
             # Check if the response contains wilderness.click _econfig
@@ -402,7 +418,7 @@ class EmbedResolver:
             headers = self._headers.copy()
             headers['Referer'] = referer
             
-            response = self._session.get(url, headers=headers, timeout=15)
+            response = self._session.get(url, headers=headers, timeout=8)
             return self._resolve_wilderness_html(response.text, url)
             
         except Exception as e:

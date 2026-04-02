@@ -3,6 +3,7 @@
 Router - Handle URL routing and menu navigation.
 """
 
+import json
 import sys
 import xbmc
 import xbmcaddon
@@ -38,12 +39,25 @@ class Router:
         elif action == 'streams':
             self._streams_list(params.get('event_id', ''), params.get('source', ''))
         elif action == 'play':
-            self._play_stream(params.get('url', ''), params.get('resolver', 'direct'))
+            # Handle both old format (single 'url') and new format (JSON 'urls')
+            urls_json = params.get('urls', '')
+            single_url = params.get('url', '')
+            resolver = params.get('resolver', 'direct')
+            
+            if urls_json:
+                # New format: JSON-encoded list of URLs
+                try:
+                    urls = json.loads(urls_json)
+                except json.JSONDecodeError:
+                    urls = [single_url] if single_url else []
+            else:
+                # Old format: single URL
+                urls = [single_url] if single_url else []
+                
+            self._play_stream(urls, resolver)
         elif action == 'settings':
             self.addon.openSettings()
         elif action == 'resolveurl_settings':
-            self._open_resolveurl_settings()
-        elif action == 'open_resolveurl_settings':
             self._open_resolveurl_settings()
         elif action.startswith('wrestling') or action == 'play_wrestling':
             # Route all wrestling actions to the wrestling handler
@@ -68,7 +82,7 @@ class Router:
         fanart = self.addon.getAddonInfo('fanart')
         
         menu_items = [
-            ('Live Events', 'sport', {'sport': 'all'}, 'DefaultTVShows.png'),
+            ('Live Sports (LeagueDo)', 'sport', {'sport': 'all'}, 'DefaultTVShows.png'),
             ('NFL', 'sport', {'sport': 'nfl'}, 'DefaultTVShows.png'),
             ('NBA', 'sport', {'sport': 'nba'}, 'DefaultTVShows.png'),
             ('NHL', 'sport', {'sport': 'nhl'}, 'DefaultTVShows.png'),
@@ -78,12 +92,10 @@ class Router:
             ('Boxing/MMA', 'sport', {'sport': 'combat'}, 'DefaultTVShows.png'),
             ('Wrestling', 'sport', {'sport': 'wrestling'}, 'DefaultTVShows.png'),
             ('[COLOR yellow]ResolveURL Settings[/COLOR]', 'resolveurl_settings', {}, 'DefaultAddonProgram.png'),
-            ('Settings', 'settings', {}, 'DefaultAddonProgram.png'),
         ]
         
         for label, action, params, icon in menu_items:
             is_folder = action not in ('settings', 'resolveurl_settings')
-            # Use special handling for settings items - they're not playable
             if action in ('settings', 'resolveurl_settings'):
                 self._add_settings_item(label, action, params, icon, fanart)
             else:
@@ -94,18 +106,13 @@ class Router:
     
     def _open_resolveurl_settings(self):
         """Open ResolveURL settings dialog."""
-        xbmc.log(f"[{self.addon_name}] _open_resolveurl_settings called", xbmc.LOGINFO)
+        xbmc.log(f"[{self.addon_name}] Opening ResolveURL settings", xbmc.LOGINFO)
         try:
-            # Check if ResolveURL is installed first
             import xbmcaddon
             try:
-                ru_addon = xbmcaddon.Addon('script.module.resolveurl')
-                xbmc.log(f"[{self.addon_name}] ResolveURL found, opening settings", xbmc.LOGINFO)
-                # Use executebuiltin which is the reliable way to open addon settings
+                xbmcaddon.Addon('script.module.resolveurl')
                 xbmc.executebuiltin('Addon.OpenSettings(script.module.resolveurl)')
-                xbmc.log(f"[{self.addon_name}] executebuiltin completed", xbmc.LOGINFO)
             except RuntimeError:
-                xbmc.log(f"[{self.addon_name}] ResolveURL not installed", xbmc.LOGWARNING)
                 xbmcgui.Dialog().ok(
                     'ResolveURL Not Found',
                     'ResolveURL addon is not installed.\n\n'
@@ -153,6 +160,9 @@ class Router:
             elif source == 'leaguedo':
                 from lib.sources.leaguedo import LeagueDoSource
                 src = LeagueDoSource()
+            elif source == 'rblive77':
+                from lib.sources.rblive77 import RBLive77Source
+                src = RBLive77Source()
             else:
                 xbmcgui.Dialog().notification(self.addon_name, f"Unknown source: {source}", xbmcgui.NOTIFICATION_ERROR)
                 return
@@ -205,6 +215,9 @@ class Router:
             elif source == 'leaguedo':
                 from lib.sources.leaguedo import LeagueDoSource
                 src = LeagueDoSource()
+            elif source == 'rblive77':
+                from lib.sources.rblive77 import RBLive77Source
+                src = RBLive77Source()
             else:
                 return
                 
@@ -225,8 +238,18 @@ class Router:
                 if lang:
                     label += f" ({lang})"
                     
+                # Handle both old format (single 'url') and new format (list 'urls')
+                urls = stream.get('urls', [])
+                if not urls:
+                    # Fallback to old single-url format
+                    single_url = stream.get('url', '')
+                    urls = [single_url] if single_url else []
+                
+                if not urls:
+                    continue
+                    
                 params = {
-                    'url': stream.get('url', ''),
+                    'urls': json.dumps(urls),  # JSON-encode the URL list
                     'resolver': stream.get('resolver', 'direct'),
                 }
                 
@@ -240,55 +263,122 @@ class Router:
             xbmcgui.Dialog().notification(self.addon_name, f"Error: {e}", xbmcgui.NOTIFICATION_ERROR)
             xbmcplugin.endOfDirectory(self.handle, succeeded=False)
             
-    def _play_stream(self, url, resolver):
-        """Play a stream URL."""
-        try:
-            resolved_url = None
-            res = None
-            
-            # Try embed resolver first if specified or if it looks like an embed
-            if resolver == 'embed':
-                from lib.resolvers.embed import EmbedResolver
-                res = EmbedResolver()
-                resolved_url = res.resolve(url)
-                
-            # Try ResolveURL for debrid + hosters
-            elif resolver == 'debrid' or resolver == 'resolveurl':
-                from lib.resolvers.resolveurl_resolver import ResolveURLResolver
-                res = ResolveURLResolver()
-                if res.is_available():
-                    resolved_url = res.resolve(url)
-                else:
-                    xbmcgui.Dialog().notification(self.addon_name, "ResolveURL not installed", xbmcgui.NOTIFICATION_WARNING)
-                    
-            # Direct resolver (default)
-            if not resolved_url:
-                from lib.resolvers.direct import DirectResolver
-                res = DirectResolver()
-                resolved_url = res.resolve(url)
-                
-            if not resolved_url:
-                xbmcgui.Dialog().notification(self.addon_name, "Failed to resolve stream", xbmcgui.NOTIFICATION_ERROR)
-                xbmcplugin.setResolvedUrl(self.handle, False, xbmcgui.ListItem())
-                return
-                
-            # Create playable item
-            li = xbmcgui.ListItem(path=resolved_url)
-            li.setProperty('IsPlayable', 'true')
-            
-            # Set headers if needed
-            if res:
-                headers = res.get_headers()
-                if headers:
-                    header_str = '|' + '&'.join([f"{k}={quote_plus(v)}" for k, v in headers.items()])
-                    li.setPath(resolved_url + header_str)
-                    
-            xbmcplugin.setResolvedUrl(self.handle, True, li)
-            
-        except Exception as e:
-            xbmc.log(f"[{self.addon_name}] Playback error: {e}", xbmc.LOGERROR)
-            xbmcgui.Dialog().notification(self.addon_name, f"Playback error: {e}", xbmcgui.NOTIFICATION_ERROR)
+    def _play_stream(self, urls, resolver):
+        """
+        Play a stream URL with automatic fallback.
+        
+        Args:
+            urls: List of URLs to try in sequence (or single URL string for backwards compat)
+            resolver: Resolver type ('embed', 'debrid', or 'direct')
+        """
+        # Handle backwards compatibility with single URL string
+        if isinstance(urls, str):
+            urls = [urls] if urls else []
+        
+        if not urls:
+            xbmcgui.Dialog().notification(self.addon_name, "No stream URLs available", xbmcgui.NOTIFICATION_ERROR)
             xbmcplugin.setResolvedUrl(self.handle, False, xbmcgui.ListItem())
+            return
+            
+        total_urls = len(urls)
+        
+        for attempt_num, url in enumerate(urls, 1):
+            try:
+                # Extract domain for logging/notification
+                try:
+                    from urllib.parse import urlparse
+                    domain = urlparse(url).netloc.split('.')[0]
+                except Exception:
+                    domain = 'unknown'
+                
+                # Show notification for fallback attempts (not first attempt)
+                if attempt_num > 1:
+                    xbmcgui.Dialog().notification(
+                        self.addon_name,
+                        f"Trying fallback source ({attempt_num}/{total_urls})",
+                        xbmcgui.NOTIFICATION_INFO,
+                        2000
+                    )
+                    
+                import time
+                attempt_start = time.time()
+                xbmc.log(f"[{self.addon_name}] Attempt {attempt_num}/{total_urls} START: {domain}", xbmc.LOGINFO)
+                
+                resolved_url = None
+                res = None
+                
+                # Try embed resolver first if specified or if it looks like an embed
+                if resolver == 'embed':
+                    from lib.resolvers.embed import EmbedResolver
+                    res = EmbedResolver()
+                    
+                    # Check for dead domains first - skip this URL and try next
+                    if res.is_dead_domain(url):
+                        xbmc.log(f"[{self.addon_name}] Skipping dead domain: {domain}", xbmc.LOGWARNING)
+                        if attempt_num == total_urls:
+                            # Last attempt failed on dead domain
+                            xbmcgui.Dialog().notification(
+                                self.addon_name,
+                                f"All sources offline",
+                                xbmcgui.NOTIFICATION_WARNING,
+                                3000
+                            )
+                        continue  # Try next URL
+                        
+                    resolved_url = res.resolve(url)
+                    
+                # Try ResolveURL for debrid + hosters
+                elif resolver == 'debrid' or resolver == 'resolveurl':
+                    from lib.resolvers.resolveurl_resolver import ResolveURLResolver
+                    res = ResolveURLResolver()
+                    if res.is_available():
+                        resolved_url = res.resolve(url)
+                    else:
+                        xbmcgui.Dialog().notification(self.addon_name, "ResolveURL not installed", xbmcgui.NOTIFICATION_WARNING)
+                        
+                # Direct resolver - ONLY if resolver type is 'direct'
+                elif resolver == 'direct':
+                    from lib.resolvers.direct import DirectResolver
+                    res = DirectResolver()
+                    resolved_url = res.resolve(url)
+                    
+                if resolved_url:
+                    # Success! Create playable item
+                    elapsed = time.time() - attempt_start
+                    xbmc.log(f"[{self.addon_name}] Attempt {attempt_num}/{total_urls} SUCCESS in {elapsed:.1f}s: {domain}", xbmc.LOGINFO)
+                    
+                    li = xbmcgui.ListItem(path=resolved_url)
+                    li.setProperty('IsPlayable', 'true')
+                    
+                    # Set headers if needed
+                    if res:
+                        headers = res.get_headers()
+                        if headers:
+                            header_str = '|' + '&'.join([f"{k}={quote_plus(v)}" for k, v in headers.items()])
+                            li.setPath(resolved_url + header_str)
+                            
+                    xbmcplugin.setResolvedUrl(self.handle, True, li)
+                    return  # Success - exit function
+                else:
+                    # This URL failed, try next
+                    elapsed = time.time() - attempt_start
+                    xbmc.log(f"[{self.addon_name}] Attempt {attempt_num}/{total_urls} FAILED in {elapsed:.1f}s: {domain} (returned None)", xbmc.LOGWARNING)
+                    continue
+                    
+            except Exception as e:
+                elapsed = time.time() - attempt_start
+                xbmc.log(f"[{self.addon_name}] Attempt {attempt_num}/{total_urls} ERROR in {elapsed:.1f}s: {e}", xbmc.LOGERROR)
+                # Try next URL
+                continue
+                
+        # All attempts failed
+        xbmcgui.Dialog().notification(
+            self.addon_name,
+            f"All {total_urls} source(s) failed",
+            xbmcgui.NOTIFICATION_ERROR,
+            3000
+        )
+        xbmcplugin.setResolvedUrl(self.handle, False, xbmcgui.ListItem())
             
     def _add_directory_item(self, label, action, params, icon, fanart, is_folder):
         """Add a directory item to the listing."""

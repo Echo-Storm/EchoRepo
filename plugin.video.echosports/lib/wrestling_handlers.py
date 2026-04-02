@@ -1,8 +1,7 @@
 """
-Transparent Wrestling Category Handler for plugin.video.echosports
+Wrestling Category Handler for plugin.video.echosports
 
-Integrates ALL wrestling content seamlessly with NO extra menus or branding.
-Organizes ~1700+ wrestling items into a logical, native-feeling structure.
+Provides organized wrestling content in a clean native structure.
 
 Content breakdown:
 - 9 live 24/7 channels
