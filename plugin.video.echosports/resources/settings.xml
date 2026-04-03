@@ -1,10 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <settings>
-    <category label="Playback">
-        <setting id="use_resolveurl" type="bool" label="Use ResolveURL for hosted streams" default="true"/>
-        <setting id="open_resolveurl_settings" type="action" label="Open ResolveURL Settings" action="Addon.OpenSettings(script.module.resolveurl)"/>
-    </category>
-    <category label="Advanced">
-        <setting id="debug_logging" type="bool" label="Debug Logging" default="false"/>
-    </category>
+    <!-- ResolveURL enabled by default, no user-facing settings needed -->
+    <setting id="use_resolveurl" type="bool" default="true" visible="false"/>
+    <setting id="debug_logging" type="bool" default="false" visible="false"/>
 </settings>

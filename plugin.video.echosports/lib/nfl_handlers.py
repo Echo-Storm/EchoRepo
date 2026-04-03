@@ -132,7 +132,6 @@ def display_items(plugin_handle, addon, items, category=''):
             # Playable item
             xbmc.log(f"[NFL] Adding item: {item['title'][:40]}", xbmc.LOGDEBUG)
             add_playable_item(plugin_handle, item, icon, fanart)
-            add_playable_item(plugin_handle, item, icon, fanart)
     
     xbmcplugin.setContent(plugin_handle, 'videos')
     xbmcplugin.endOfDirectory(plugin_handle)

@@ -83,6 +83,7 @@ class Router:
         
         menu_items = [
             ('Live Sports (LeagueDo)', 'sport', {'sport': 'all'}, 'DefaultTVShows.png'),
+            ('[COLOR cyan]MadPlay77 Live Sports[/COLOR]', 'events', {'source': 'madplay77', 'sport': 'all'}, 'DefaultTVShows.png'),
             ('NFL', 'sport', {'sport': 'nfl'}, 'DefaultTVShows.png'),
             ('NBA', 'sport', {'sport': 'nba'}, 'DefaultTVShows.png'),
             ('NHL', 'sport', {'sport': 'nhl'}, 'DefaultTVShows.png'),
@@ -91,7 +92,6 @@ class Router:
             ('[COLOR lime]Racing/Motorsport[/COLOR]', 'racing', {}, 'DefaultTVShows.png'),
             ('Boxing/MMA', 'sport', {'sport': 'combat'}, 'DefaultTVShows.png'),
             ('Wrestling', 'sport', {'sport': 'wrestling'}, 'DefaultTVShows.png'),
-            ('[COLOR yellow]ResolveURL Settings[/COLOR]', 'resolveurl_settings', {}, 'DefaultAddonProgram.png'),
         ]
         
         for label, action, params, icon in menu_items:
@@ -163,6 +163,9 @@ class Router:
             elif source == 'rblive77':
                 from lib.sources.rblive77 import RBLive77Source
                 src = RBLive77Source()
+            elif source == 'madplay77':
+                from lib.sources.madplay77 import MadPlay77Source
+                src = MadPlay77Source()
             else:
                 xbmcgui.Dialog().notification(self.addon_name, f"Unknown source: {source}", xbmcgui.NOTIFICATION_ERROR)
                 return
@@ -170,7 +173,18 @@ class Router:
             events = src.get_events(sport)
             
             if not events:
-                xbmcgui.Dialog().notification(self.addon_name, "No events found", xbmcgui.NOTIFICATION_INFO)
+                # More helpful error message
+                if source == 'leaguedo':
+                    xbmcgui.Dialog().ok(
+                        'LeagueDo - No Events',
+                        'Could not load events from LeagueDo.\n\n'
+                        'Possible causes:\n'
+                        '• Site may be down or blocking requests\n'
+                        '• Check Kodi log for details\n'
+                        '• Try again in a few minutes'
+                    )
+                else:
+                    xbmcgui.Dialog().notification(self.addon_name, "No events found", xbmcgui.NOTIFICATION_INFO)
                 xbmcplugin.endOfDirectory(self.handle, succeeded=False)
                 return
                 
@@ -218,6 +232,9 @@ class Router:
             elif source == 'rblive77':
                 from lib.sources.rblive77 import RBLive77Source
                 src = RBLive77Source()
+            elif source == 'madplay77':
+                from lib.sources.madplay77 import MadPlay77Source
+                src = MadPlay77Source()
             else:
                 return
                 

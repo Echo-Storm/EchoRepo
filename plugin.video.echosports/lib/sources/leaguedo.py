@@ -46,10 +46,17 @@ class LeagueDoSource(BaseSource):
         super().__init__()
         self._session = requests.Session()
         self._session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Referer': self.BASE_URL,
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Cache-Control': 'max-age=0',
         })
         # Cache for events
         self._events_cache = {}
@@ -62,11 +69,19 @@ class LeagueDoSource(BaseSource):
             HTML content or None on error
         """
         try:
+            xbmc.log(f"[LeagueDo] Fetching: {self.BASE_URL}", xbmc.LOGINFO)
             response = self._session.get(self.BASE_URL, timeout=15)
+            xbmc.log(f"[LeagueDo] Response: status={response.status_code}, length={len(response.text)} bytes", xbmc.LOGINFO)
+            
+            # Check for Cloudflare challenge
+            if 'cf-browser-verification' in response.text or 'Just a moment' in response.text:
+                xbmc.log("[LeagueDo] ERROR: Cloudflare challenge detected - site is blocking automated access", xbmc.LOGERROR)
+                return None
+                
             response.raise_for_status()
             return response.text
         except requests.RequestException as e:
-            xbmc.log(f"[LeagueDo] Fetch error: {e}", xbmc.LOGERROR)
+            xbmc.log(f"[LeagueDo] Fetch error: {type(e).__name__}: {e}", xbmc.LOGERROR)
             return None
             
     def _extract_matches_json(self, html: str) -> Optional[List[Dict]]:
@@ -83,41 +98,60 @@ class LeagueDoSource(BaseSource):
         Returns:
             List of match dictionaries or None
         """
+        xbmc.log(f"[LeagueDo] Parsing HTML ({len(html)} bytes)...", xbmc.LOGINFO)
+        
         # Primary pattern: window.matches = JSON.parse(`...`)
         pattern1 = r'window\.matches\s*=\s*JSON\.parse\(`(\[.+?\])`\)'
         match = re.search(pattern1, html, re.DOTALL)
         
         if match:
+            xbmc.log("[LeagueDo] Pattern 1 matched (window.matches)", xbmc.LOGINFO)
             try:
-                return json.loads(match.group(1))
+                data = json.loads(match.group(1))
+                xbmc.log(f"[LeagueDo] Parsed {len(data)} events from pattern 1", xbmc.LOGINFO)
+                return data
             except json.JSONDecodeError as e:
                 xbmc.log(f"[LeagueDo] JSON parse error (pattern1): {e}", xbmc.LOGWARNING)
+        else:
+            xbmc.log("[LeagueDo] Pattern 1 not matched, trying pattern 2...", xbmc.LOGDEBUG)
                 
         # Fallback pattern: embedded in Next.js data
         pattern2 = r'"matches"\s*:\s*(\[.+?\])\s*[,}]'
         match = re.search(pattern2, html.replace('\\', ''), re.DOTALL)
         
         if match:
+            xbmc.log("[LeagueDo] Pattern 2 matched (embedded matches)", xbmc.LOGINFO)
             try:
-                return json.loads(match.group(1))
+                data = json.loads(match.group(1))
+                xbmc.log(f"[LeagueDo] Parsed {len(data)} events from pattern 2", xbmc.LOGINFO)
+                return data
             except json.JSONDecodeError as e:
                 xbmc.log(f"[LeagueDo] JSON parse error (pattern2): {e}", xbmc.LOGWARNING)
+        else:
+            xbmc.log("[LeagueDo] Pattern 2 not matched, trying script scan...", xbmc.LOGDEBUG)
                 
         # Try finding any script with match-like data
         scripts = re.findall(r'<script[^>]*>(.+?)</script>', html, re.DOTALL)
-        for script in scripts:
+        xbmc.log(f"[LeagueDo] Scanning {len(scripts)} script tags...", xbmc.LOGDEBUG)
+        
+        for i, script in enumerate(scripts):
             if 'matchDate' in script or 'startTimestamp' in script:
+                xbmc.log(f"[LeagueDo] Script #{i} contains match data", xbmc.LOGDEBUG)
                 # Try to extract JSON array
                 json_match = re.search(r'(\[.*?"team1".*?"team2".*?\])', script, re.DOTALL)
                 if json_match:
                     try:
                         # Clean up escaped characters
                         json_str = json_match.group(1).replace('\\"', '"').replace('\\/', '/')
-                        return json.loads(json_str)
+                        data = json.loads(json_str)
+                        xbmc.log(f"[LeagueDo] Parsed {len(data)} events from script #{i}", xbmc.LOGINFO)
+                        return data
                     except json.JSONDecodeError:
                         continue
                         
-        xbmc.log("[LeagueDo] Could not extract matches JSON", xbmc.LOGERROR)
+        xbmc.log("[LeagueDo] ERROR: Could not extract matches JSON - page structure may have changed", xbmc.LOGERROR)
+        # Log first 500 chars for debugging
+        xbmc.log(f"[LeagueDo] Page preview: {html[:500]}", xbmc.LOGDEBUG)
         return None
         
     def _matches_sport(self, event: Dict, sport: str) -> bool:

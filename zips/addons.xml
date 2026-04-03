@@ -198,7 +198,7 @@
             </menu>
         </extension>
     </addon>
-    <addon id="plugin.video.echosports" name="Echo Sports" version="0.7.0" provider-name="Echo-Storm">
+    <addon id="plugin.video.echosports" name="Echo Sports" version="0.7.3" provider-name="Echo-Storm">
         <requires>
             <import addon="xbmc.python" version="3.0.0" />
             <import addon="script.module.requests" version="2.22.0" />
@@ -223,6 +223,30 @@
                 <fanart>resources/fanart.jpg</fanart>
             </assets>
             <news>
+v0.7.3 (2026-04-03) - MADPLAY77 STREAM RESOLUTION
+- MadPlay77: Implemented stream resolution with multiple strategies
+- Strategy 1: Direct API attempts (like RBLive77 pattern)
+- Strategy 2: Embed page parsing with .m3u8 URL extraction
+- Strategy 3: trex:// protocol resolution (if found in API response)
+- MadPlay77: Match list fully working (50+ live events)
+- MadPlay77: Protobuf parser with proper field accumulation
+- MadPlay77: sfver hash rotation support
+- Based on: APK analysis + HTTP Toolkit traffic captures (April 3, 2026)
+- NOTE: Stream resolution is experimental - needs testing with live events
+
+v0.7.2 (2026-04-02) - DIAGNOSTIC RELEASE
+- LeagueDo: Enhanced diagnostic logging to troubleshoot parsing issues
+- LeagueDo: Updated User-Agent to Chrome 124 with full browser headers
+- LeagueDo: Added Cloudflare challenge detection
+- LeagueDo: Better error dialog when no events found
+- Check Kodi log for detailed LeagueDo diagnostics
+
+v0.7.1 (2026-04-02) - BUGFIX RELEASE
+- FIXED: NFL items appearing twice in menu (duplicate add_playable_item call)
+- FIXED: Removed debug/ResolveURL settings from user-facing settings UI
+- FIXED: Removed ResolveURL Settings from main menu (access via Kodi addon settings)
+- ResolveURL still enabled by default, configure via Kodi → Add-ons → My add-ons → script.module.resolveurl
+
 v0.7.0 (2026-04-01) - STABLE RELEASE
 - MAJOR: Automatic stream fallback - tries all available sources until one works
 - User clicks once, addon automatically retries failed sources with progress notifications
