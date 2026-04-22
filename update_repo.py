@@ -16,7 +16,6 @@ import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from datetime import datetime
-from decimal import Decimal, InvalidOperation, getcontext
 
 # === Configuration ===
 REPO_ROOT = Path(__file__).parent.resolve()
@@ -32,9 +31,6 @@ EXCLUDED_DIRS = {
 EXCLUDED_FILES = {
     ".gitignore", ".gitattributes", "desktop.ini", "Thumbs.db", ".DS_Store"
 }
-
-# Set Decimal precision
-getcontext().prec = 6
 
 # === Helper Functions ===
 
@@ -116,14 +112,12 @@ def generate_addons_xml(addon_elements):
     """Generate addons.xml from list of addon root elements."""
     root = ET.Element("addons")
     for elem in addon_elements:
-        # Append a deep copy of the element to avoid altering original trees
         root.append(elem)
 
-    # Pretty-print (Python 3.9+)
     try:
         ET.indent(root, space="    ")
     except AttributeError:
-        pass  # older Python versions: skip indentation
+        pass
 
     tree = ET.ElementTree(root)
     ZIPS_DIR.mkdir(parents=True, exist_ok=True)
@@ -145,56 +139,50 @@ def generate_md5():
     print(f"✓ Generated {ADDONS_XML_MD5.relative_to(REPO_ROOT)}")
     print(f"  MD5: {checksum}")
 
-def bump_repo_version(increment=Decimal("0.1")):
+def bump_repo_version():
     """
-    Find repository addon folder (repository.echostorm), bump its addon.xml version by increment,
-    and write the updated addon.xml back.
+    Increment the LAST numeric segment of the repository addon version by +1.
+    Example: 1.0.3.1.1 -> 1.0.3.1.2
     """
     repo_folder = REPO_ROOT / "repository.echostorm"
     addon_xml = repo_folder / "addon.xml"
+
     if not addon_xml.exists():
         print("No repository addon found to bump version.")
         return None
 
     tree = ET.parse(addon_xml)
     root = tree.getroot()
+
     current_version = root.get("version")
     if not current_version:
         print("Repository addon has no version attribute.")
         return None
 
-    # Try to parse as Decimal; if it fails, attempt to handle dotted versions by using the last numeric part
-    try:
-        new_version = (Decimal(current_version) + increment).normalize()
-        # Remove any trailing zeros and possible exponent
-        new_version_str = format(new_version, 'f')
-    except (InvalidOperation, ValueError):
-        # Fallback: handle dotted versions like "1.2.3" -> increment last numeric segment by 1 in tenths
-        parts = current_version.split(".")
-        try:
-            # Try to treat last part as integer and add 1 to the last decimal digit (i.e., +0.1)
-            # Convert whole version to Decimal by joining with '.' and adding increment
-            joined = ".".join(parts)
-            new_version = (Decimal(joined) + increment).normalize()
-            new_version_str = format(new_version, 'f')
-        except Exception:
-            # As a last resort, append .1
-            new_version_str = current_version + ".1"
+    parts = current_version.split(".")
 
-    root.set("version", new_version_str)
-    # Write back with declaration
+    try:
+        parts[-1] = str(int(parts[-1]) + 1)
+    except ValueError:
+        parts.append("1")
+
+    new_version = ".".join(parts)
+
+    root.set("version", new_version)
+
     try:
         ET.indent(root, space="    ")
     except AttributeError:
         pass
+
     tree.write(addon_xml, encoding="UTF-8", xml_declaration=True)
-    print(f"✓ Bumped repository version: {current_version} -> {new_version_str}")
-    return new_version_str
+
+    print(f"✓ Bumped repository version: {current_version} -> {new_version}")
+    return new_version
 
 def git_commit_and_push():
     """Commit all changes and push to GitHub."""
     print("\n=== Git Operations ===")
-    # Check if in a git repo
     result = subprocess.run(
         ["git", "rev-parse", "--git-dir"],
         cwd=REPO_ROOT, capture_output=True, text=True
@@ -203,10 +191,8 @@ def git_commit_and_push():
         print(" Not a git repository. Skipping commit.")
         return
 
-    # Stage all changes
     subprocess.run(["git", "add", "-A"], cwd=REPO_ROOT, check=True)
 
-    # Check if there are staged changes
     result = subprocess.run(
         ["git", "diff", "--cached", "--quiet"],
         cwd=REPO_ROOT, capture_output=True
@@ -215,13 +201,11 @@ def git_commit_and_push():
         print("✓ No changes to commit")
         return
 
-    # Commit
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
     commit_msg = f"Update repository - {timestamp}"
     subprocess.run(["git", "commit", "-m", commit_msg], cwd=REPO_ROOT, check=True)
     print(f"✓ Committed: {commit_msg}")
 
-    # Push
     try:
         subprocess.run(
             ["git", "push"],
@@ -247,11 +231,9 @@ def validate_only():
         try:
             addon_id, version, name, _ = parse_addon_xml(addon_path)
 
-            # Check directory name matches addon ID
             if addon_path.name != addon_id:
                 print(f" {addon_path.name}: folder name != addon ID '{addon_id}'")
 
-            # Check for required assets
             missing = []
             for asset in ["icon.png", "fanart.jpg"]:
                 if not (addon_path / asset).exists():
@@ -283,10 +265,8 @@ def main():
     print("EchoRepo Maintenance Script")
     print("=" * 60 + "\n")
 
-    # Ensure zips directory exists
     ZIPS_DIR.mkdir(exist_ok=True)
 
-    # Find addon folders
     addon_folders = find_addon_folders()
     if not addon_folders:
         print("✗ No addon folders found (directories with addon.xml)")
@@ -299,20 +279,14 @@ def main():
         addon_id, version, name, root_elem = parse_addon_xml(addon_path)
         print(f"• {addon_id} v{version}")
 
-        # Create zip
         create_addon_zip(addon_path, addon_id, version)
-
-        # Collect element for addons.xml
         addon_elements.append(root_elem)
 
-    # Bump repository version (if repository addon exists)
-    bumped = bump_repo_version(Decimal("0.1"))
+    bump_repo_version()
 
-    # Generate addons.xml and checksum
     generate_addons_xml(addon_elements)
     generate_md5()
 
-    # Git operations
     if no_commit:
         print("\n✓ Skipped git operations (--no-commit)")
     else:
@@ -322,7 +296,6 @@ def main():
     print("Repository update complete!")
     print("=" * 60)
 
-    # Show install URL (if repository addon zip exists)
     repo_addon = ZIPS_DIR / "repository.echostorm"
     if repo_addon.exists():
         zips = list(repo_addon.glob("repository.echostorm-*.zip"))
