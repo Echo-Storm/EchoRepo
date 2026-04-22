@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<addon id="repository.echostorm" name="Echo-Storm Repository" version="1.0.2.1" provider-name="Echo-Storm">
+<addon id="repository.echostorm" name="Echo-Storm Repository" version="1.0.0" provider-name="Echo-Storm">
     <extension point="xbmc.addon.repository" name="Echo-Storm Repository">
         <dir>
             <info compressed="false">https://raw.githubusercontent.com/Echo-Storm/EchoRepo/main/zips/addons.xml</info>
