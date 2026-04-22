@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<settings>
-    <!-- ResolveURL enabled by default, no user-facing settings needed -->
-    <setting id="use_resolveurl" type="bool" default="true" visible="false"/>
-    <setting id="debug_logging" type="bool" default="false" visible="false"/>
-</settings>
