@@ -4,9 +4,16 @@ EchoRepo Maintenance Script
 Scans addon folders, generates addons.xml, creates zips in zips/{addon_id}/
 
 Usage:
-    python3 update_repo.py              # Full update + git commit/push
-    python3 update_repo.py --no-commit  # Generate files only, no git operations
-    python3 update_repo.py --validate   # Validate addon.xml files only
+    python3 update_repo.py               # Full update + git commit/push
+    python3 update_repo.py --no-commit   # Generate files only, no git operations
+    python3 update_repo.py --validate    # Validate addon.xml files only
+    python3 update_repo.py --bump-repo   # Bump repository.echostorm version, then full update + push
+
+Note: The repository.echostorm version is NOT bumped on normal runs.
+      Only use --bump-repo when you have changed the repo addon itself
+      (i.e. its URLs, summary, or description in addon.xml).
+      Kodi uses the version to detect repo addon updates, so bumping it
+      unnecessarily just adds noise.
 """
 import os
 import sys
@@ -266,7 +273,8 @@ def validate_only():
 
 def main():
     no_commit = "--no-commit" in sys.argv
-    validate = "--validate" in sys.argv
+    validate  = "--validate"  in sys.argv
+    bump_repo = "--bump-repo" in sys.argv
 
     if validate:
         success = validate_only()
@@ -278,10 +286,13 @@ def main():
 
     ZIPS_DIR.mkdir(exist_ok=True)
 
-    # --- BUG FIX: bump version BEFORE scanning, so parse_addon_xml reads the
-    # new version from disk. Previously, bump happened after the scan loop,
-    # causing addons.xml to always contain the pre-bump version number. ---
-    bump_repo_version()
+    # Only bump repository.echostorm when explicitly requested.
+    # Normal runs just rebuild zips and addons.xml - the repo addon version
+    # stays the same. Bump it only when its URLs or metadata actually change.
+    if bump_repo:
+        bump_repo_version()
+    else:
+        print("[--] Skipping repo version bump (use --bump-repo to increment)")
 
     addon_folders = find_addon_folders()
     if not addon_folders:

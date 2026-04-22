@@ -2,7 +2,7 @@
 """
 EchoRepo Manager GUI
 A simple PyQt6 front-end for update_repo.py.
-Run this from anywhere — it will look for update_repo.py in the same folder,
+Run this from anywhere - it will look for update_repo.py in the same folder,
 or let you browse for the repo.
 
 Requirements: PyQt6  (pip install PyQt6)
@@ -23,12 +23,12 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont, QColor, QPalette, QTextCursor
 
-# ── Paths ────────────────────────────────────────────────────────────────────
+# -- Paths --------------------------------------------------------------------
 
 SCRIPT_DIR = Path(__file__).parent.resolve()
 UPDATE_SCRIPT = SCRIPT_DIR / "update_repo.py"
 
-# ── Worker thread ────────────────────────────────────────────────────────────
+# -- Worker thread ------------------------------------------------------------
 
 class Worker(QThread):
     """Runs update_repo.py in a subprocess, streams stdout/stderr to the GUI."""
@@ -61,7 +61,7 @@ class Worker(QThread):
             self.line_out.emit(f"ERROR: {e}")
             self.finished.emit(1)
 
-# ── Styling ──────────────────────────────────────────────────────────────────
+# -- Styling ------------------------------------------------------------------
 
 DARK_STYLE = """
 QMainWindow, QWidget {
@@ -117,6 +117,14 @@ QPushButton#btn_push {
 QPushButton#btn_push:hover { background: #233515; }
 QPushButton#btn_push:disabled { background: #141414; border-color: #2a2a2a; color: #3a3a3a; }
 
+QPushButton#btn_bump {
+    background: #1a1a2a;
+    border-color: #5566aa;
+    color: #7788cc;
+}
+QPushButton#btn_bump:hover { background: #20203a; border-color: #7788cc; }
+QPushButton#btn_bump:disabled { background: #141414; border-color: #2a2a2a; color: #3a3a3a; }
+
 QPlainTextEdit {
     background: #080808;
     border: 1px solid #1e1e1e;
@@ -158,7 +166,7 @@ QLabel#section_title { color: #555; font-size: 11px; text-transform: uppercase; 
 QSplitter::handle { background: #1e1e1e; }
 """
 
-# ── Main Window ───────────────────────────────────────────────────────────────
+# -- Main Window ---------------------------------------------------------------
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -177,7 +185,7 @@ class MainWindow(QMainWindow):
         root_layout.setSpacing(10)
         root_layout.setContentsMargins(14, 12, 14, 8)
 
-        # ── Repo path row ──────────────────────────────────────────────────
+        # -- Repo path row --------------------------------------------------
         path_group = QGroupBox("Repo Location")
         path_layout = QHBoxLayout(path_group)
         path_layout.setContentsMargins(10, 12, 10, 10)
@@ -187,7 +195,7 @@ class MainWindow(QMainWindow):
         self.path_edit.setPlaceholderText("Path to EchoRepo folder (contains update_repo.py)")
         self.path_edit.textChanged.connect(self._on_path_changed)
 
-        browse_btn = QPushButton("Browse…")
+        browse_btn = QPushButton("Browse...")
         browse_btn.setFixedWidth(80)
         browse_btn.clicked.connect(self._browse_repo)
 
@@ -195,7 +203,7 @@ class MainWindow(QMainWindow):
         path_layout.addWidget(browse_btn)
         root_layout.addWidget(path_group)
 
-        # ── Splitter: addons table | log ───────────────────────────────────
+        # -- Splitter: addons table | log -----------------------------------
         splitter = QSplitter(Qt.Orientation.Vertical)
         splitter.setHandleWidth(4)
 
@@ -237,7 +245,7 @@ class MainWindow(QMainWindow):
         splitter.setStretchFactor(1, 2)
         root_layout.addWidget(splitter)
 
-        # ── Install URL display ────────────────────────────────────────────
+        # -- Install URL display --------------------------------------------
         url_frame = QFrame()
         url_layout = QHBoxLayout(url_frame)
         url_layout.setContentsMargins(4, 0, 4, 0)
@@ -247,7 +255,7 @@ class MainWindow(QMainWindow):
         lbl.setObjectName("section_title")
         lbl.setFixedWidth(68)
 
-        self.url_label = QLabel("—")
+        self.url_label = QLabel("-")
         self.url_label.setObjectName("url_label")
         self.url_label.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse
@@ -258,7 +266,7 @@ class MainWindow(QMainWindow):
         url_layout.addWidget(self.url_label, 1)
         root_layout.addWidget(url_frame)
 
-        # ── Buttons ────────────────────────────────────────────────────────
+        # -- Buttons --------------------------------------------------------
         btn_frame = QFrame()
         btn_layout = QHBoxLayout(btn_frame)
         btn_layout.setContentsMargins(0, 0, 0, 0)
@@ -269,15 +277,28 @@ class MainWindow(QMainWindow):
         self.btn_validate.clicked.connect(lambda: self._run("--validate"))
 
         self.btn_build = QPushButton("Build Only")
-        self.btn_build.setToolTip("Generate zips and addons.xml — no git commit/push")
+        self.btn_build.setToolTip("Rebuild zips and addons.xml - no version bump, no git")
         self.btn_build.clicked.connect(lambda: self._run("--no-commit"))
 
-        self.btn_push = QPushButton("⬆  Update && Push")
+        self.btn_push = QPushButton("[^]  Update && Push")
         self.btn_push.setObjectName("btn_push")
-        self.btn_push.setToolTip("Full update: bump version, build zips, commit, push to GitHub")
+        self.btn_push.setToolTip(
+            "Rebuild zips, regenerate addons.xml, commit and push.\n"
+            "Does NOT bump the repository.echostorm version.\n"
+            "Use this for normal addon updates."
+        )
         self.btn_push.clicked.connect(lambda: self._run())
 
-        self.btn_refresh = QPushButton("↺ Refresh")
+        self.btn_bump = QPushButton("Bump Repo Ver")
+        self.btn_bump.setObjectName("btn_bump")
+        self.btn_bump.setToolTip(
+            "Increment repository.echostorm version, rebuild, commit, push.\n"
+            "Only needed when you change the repo addon URLs or metadata.\n"
+            "NOT needed for normal addon updates."
+        )
+        self.btn_bump.clicked.connect(lambda: self._run("--bump-repo"))
+
+        self.btn_refresh = QPushButton("[R] Refresh")
         self.btn_refresh.setToolTip("Re-scan addon folders and refresh the list")
         self.btn_refresh.clicked.connect(self._refresh_addon_list)
 
@@ -285,20 +306,21 @@ class MainWindow(QMainWindow):
         btn_layout.addStretch()
         btn_layout.addWidget(self.btn_validate)
         btn_layout.addWidget(self.btn_build)
+        btn_layout.addWidget(self.btn_bump)
         btn_layout.addWidget(self.btn_push)
 
         root_layout.addWidget(btn_frame)
 
-        # ── Status bar ─────────────────────────────────────────────────────
+        # -- Status bar -----------------------------------------------------
         self.status = QStatusBar()
         self.setStatusBar(self.status)
-        self.status.showMessage("Ready — open your EchoRepo folder to start.")
+        self.status.showMessage("Ready - open your EchoRepo folder to start.")
 
         # Auto-detect if running from the repo
         if UPDATE_SCRIPT.exists():
             self.path_edit.setText(str(SCRIPT_DIR))
 
-    # ── Helpers ───────────────────────────────────────────────────────────────
+    # -- Helpers ---------------------------------------------------------------
 
     def _browse_repo(self):
         folder = QFileDialog.getExistingDirectory(
@@ -318,15 +340,15 @@ class MainWindow(QMainWindow):
         else:
             self._repo_path = None
             self.addon_table.setRowCount(0)
-            self.url_label.setText("—")
+            self.url_label.setText("-")
             self._set_buttons_enabled(False)
             if text.strip():
-                self.status.showMessage("⚠  update_repo.py not found in that folder.")
+                self.status.showMessage("[!]  update_repo.py not found in that folder.")
             else:
-                self.status.showMessage("Ready — open your EchoRepo folder to start.")
+                self.status.showMessage("Ready - open your EchoRepo folder to start.")
 
     def _set_buttons_enabled(self, enabled: bool):
-        for btn in (self.btn_validate, self.btn_build, self.btn_push, self.btn_refresh):
+        for btn in (self.btn_validate, self.btn_build, self.btn_push, self.btn_bump, self.btn_refresh):
             btn.setEnabled(enabled)
 
     def _refresh_addon_list(self):
@@ -382,9 +404,9 @@ class MainWindow(QMainWindow):
                 url = f"https://raw.githubusercontent.com/Echo-Storm/EchoRepo/main/zips/repository.echostorm/{zname}"
                 self.url_label.setText(url)
                 return
-        self.url_label.setText("— (run Build to generate zip)")
+        self.url_label.setText("- (run Build to generate zip)")
 
-    # ── Run worker ────────────────────────────────────────────────────────────
+    # -- Run worker ------------------------------------------------------------
 
     def _run(self, *args):
         if not self._repo_path:
@@ -397,9 +419,15 @@ class MainWindow(QMainWindow):
         is_push = "--no-commit" not in extra and "--validate" not in extra
 
         if is_push:
+            is_bump = "--bump-repo" in extra
+            action_desc = (
+                "This will bump the repository.echostorm version, rebuild, commit, and push.\n\n"
+                "Only do this if you changed the repo addon's URLs or metadata.\nProceed?"
+                if is_bump else
+                "This will rebuild zips, regenerate addons.xml, commit, and push to GitHub.\n\nProceed?"
+            )
             answer = QMessageBox.question(
-                self, "Confirm Push",
-                "This will bump the repository version, rebuild zips, commit, and push to GitHub.\n\nProceed?",
+                self, "Confirm Push", action_desc,
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
             if answer != QMessageBox.StandardButton.Yes:
@@ -411,7 +439,7 @@ class MainWindow(QMainWindow):
         self._log_line(f"{'='*50}")
 
         self._set_buttons_enabled(False)
-        self.status.showMessage("Running…")
+        self.status.showMessage("Running...")
 
         self._worker = Worker(self._repo_path, extra)
         self._worker.line_out.connect(self._log_line)
@@ -426,13 +454,13 @@ class MainWindow(QMainWindow):
         self._set_buttons_enabled(True)
         self._refresh_addon_list()
         if exit_code == 0:
-            self.status.showMessage(f"✓ Done ({datetime.now().strftime('%H:%M:%S')})")
-            self._log_line("\n✓ Complete.")
+            self.status.showMessage(f"[OK] Done ({datetime.now().strftime('%H:%M:%S')})")
+            self._log_line("\n[OK] Complete.")
         else:
-            self.status.showMessage(f"✗ Exited with code {exit_code}")
-            self._log_line(f"\n✗ Process exited with code {exit_code}")
+            self.status.showMessage(f"[!!] Exited with code {exit_code}")
+            self._log_line(f"\n[!!] Process exited with code {exit_code}")
 
-# ── Entry point ───────────────────────────────────────────────────────────────
+# -- Entry point ---------------------------------------------------------------
 
 def main():
     app = QApplication(sys.argv)
