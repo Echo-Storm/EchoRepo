@@ -386,7 +386,7 @@ v0.1.0 (2026-03-29)
         </news>
         </extension>
     </addon>
-    <addon id="repository.echostorm" name="Echo-Storm Repository" version="1.0.2" provider-name="Echo-Storm">
+    <addon id="repository.echostorm" name="Echo-Storm Repository" version="1.0.3" provider-name="Echo-Storm">
         <extension point="xbmc.addon.repository" name="Echo-Storm Repository">
             <dir>
                 <info compressed="false">https://raw.githubusercontent.com/Echo-Storm/EchoRepo/main/zips/addons.xml</info>
