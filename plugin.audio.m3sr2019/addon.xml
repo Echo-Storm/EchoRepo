@@ -16,8 +16,8 @@
         <summary>MP3 Streams Echoed — music streaming for Kodi</summary>
         <description>Browse and stream songs and albums. Browse by genre, search artists, albums or songs, save favourites, play or shuffle full albums, and stream tracks directly in Kodi.</description>
         <assets>
-            <icon>resources/media/icon.png</icon>
-            <fanart>resources/media/fanart.jpg</fanart>
+            <icon>icon.png</icon>
+            <fanart>fanart.jpg</fanart>
         </assets>
     </extension>
 </addon>
