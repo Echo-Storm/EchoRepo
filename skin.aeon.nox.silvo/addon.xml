@@ -19,10 +19,10 @@
 		<license>CC BY-NC-SA 4.0</license>
 		<website>https://github.com/Echo-Storm</website>
 		<source>https://github.com/Echo-Storm/EchoRepo</source>
-		<assets>
-			<icon>resources/icon.png</icon>
-			<fanart>resources/fanart.jpg</fanart>
-		</assets>
+        <assets>
+            <icon>icon.png</icon>
+            <fanart>fanart.jpg</fanart>
+        </assets>
 		<news>[I][COLOR FFFF9800]v40.0.5 - Echostorm Edition[/COLOR][/I][CR]- Packed textures for faster loading[CR]- Trimmed extras for smaller footprint[CR]- Private release</news>
 	</extension>
 </addon>

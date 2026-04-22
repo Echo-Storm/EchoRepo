@@ -386,7 +386,7 @@ v0.1.0 (2026-03-29)
         </news>
         </extension>
     </addon>
-    <addon id="repository.echostorm" name="Echo-Storm Repository" version="1.0.3" provider-name="Echo-Storm">
+    <addon id="repository.echostorm" name="Echo-Storm Repository" version="1.0.3.1" provider-name="Echo-Storm">
         <extension point="xbmc.addon.repository" name="Echo-Storm Repository">
             <dir>
                 <info compressed="false">https://raw.githubusercontent.com/Echo-Storm/EchoRepo/main/zips/addons.xml</info>
@@ -398,6 +398,10 @@ v0.1.0 (2026-03-29)
             <summary>Echo-Storm's Kodi Repository</summary>
             <description>Repository for Echo-Storm's custom Kodi addons, skins, and tools</description>
             <platform>all</platform>
+            <assets>
+                <icon>icon.png</icon>
+                <fanart>fanart.jpg</fanart>
+            </assets>
         </extension>
     </addon>
     <addon id="skin.aeon.nox.silvo" version="40.0.5" name="Aeon Nox: SiLVO - Echostorm Edition" provider-name="Echo-Storm">
@@ -421,8 +425,8 @@ v0.1.0 (2026-03-29)
             <website>https://github.com/Echo-Storm</website>
             <source>https://github.com/Echo-Storm/EchoRepo</source>
             <assets>
-                <icon>resources/icon.png</icon>
-                <fanart>resources/fanart.jpg</fanart>
+                <icon>icon.png</icon>
+                <fanart>fanart.jpg</fanart>
             </assets>
             <news>[I][COLOR FFFF9800]v40.0.5 - Echostorm Edition[/COLOR][/I][CR]- Packed textures for faster loading[CR]- Trimmed extras for smaller footprint[CR]- Private release</news>
         </extension>
@@ -444,9 +448,8 @@ v0.1.0 (2026-03-29)
             <license>MIT</license>
             <source>https://github.com/Echo-Storm</source>
             <assets>
-                <icon>resources/icon.png</icon>
-                <banner>resources/banner.png</banner>
-                <fanart>resources/fanart.jpg</fanart>
+                <icon>icon.png</icon>
+                <fanart>fanart.jpg</fanart>
             </assets>
         </extension>
     </addon>

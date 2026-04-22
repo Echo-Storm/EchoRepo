@@ -15,10 +15,9 @@
 		<platform>all</platform>
 		<license>MIT</license>
 		<source>https://github.com/Echo-Storm</source>
-		<assets>
-			<icon>resources/icon.png</icon>
-			<banner>resources/banner.png</banner>
-			<fanart>resources/fanart.jpg</fanart>
-		</assets>
+        <assets>
+            <icon>icon.png</icon>
+            <fanart>fanart.jpg</fanart>
+        </assets>
 	</extension>
 </addon>
