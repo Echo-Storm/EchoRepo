@@ -19,7 +19,7 @@ class Main(xbmc.Monitor):
 			if self.old != current:
 				utils.log('Settings changed, refreshing ...')
 				config.init()
-				weather.Main(str(utils.settingrpc("weather.currentlocation")), mode='update')
+				weather.Main(str(utils.settingrpc("weather.currentlocation") or 1), mode='update')
 
 				# Map zoom
 				if current.get('mapzoom') != self.old.get('mapzoom'):

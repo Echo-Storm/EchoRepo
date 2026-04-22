@@ -31,28 +31,35 @@ def Main():
 				config.init(cache=True)
 
 			start   = utils.time.time()
-			current = utils.settingrpc("weather.currentlocation")
+			current = utils.settingrpc("weather.currentlocation") or 1  # fallback: loc1 if RPC fails
 
 			# Download
 			for locid in range(1, config.addon.maxlocs):
+				if utils.monitor.abortRequested():
+					break
 				if utils.setting(f'loc{locid}'):
 					weather.Main(str(locid), mode='download')
 
 			# Update
-			weather.Main(str(current), mode='update')
+			if not utils.monitor.abortRequested():
+				weather.Main(str(current), mode='update')
 			utils.setsetting('service', 'idle')
 
 			# Notification
-			if startup or utils.lastupdate('alert_notification') >= utils.setting('alert_interval', 'int') * 60:
-				utils.setupdate('alert_notification')
+			if not utils.monitor.abortRequested():
+				if startup or utils.lastupdate('alert_notification') >= utils.setting('alert_interval', 'int') * 60:
+					utils.setupdate('alert_notification')
 
-				# Queue
-				for locid in range(1, config.addon.maxlocs):
-					if utils.setting(f'loc{locid}') and utils.setting(f'loc{locid}alert', 'bool'):
-						weather.Main(str(locid), mode='msgqueue')
+					# Queue
+					for locid in range(1, config.addon.maxlocs):
+						if utils.monitor.abortRequested():
+							break
+						if utils.setting(f'loc{locid}') and utils.setting(f'loc{locid}alert', 'bool'):
+							weather.Main(str(locid), mode='msgqueue')
 
-				# Send
-				weather.Main(str(current), mode='msgsend')
+					# Send
+					if not utils.monitor.abortRequested():
+						weather.Main(str(current), mode='msgsend')
 
 			# Finish
 			utils.log(f'Finished ({round(utils.time.time() - start, 3)} sec)', 3)

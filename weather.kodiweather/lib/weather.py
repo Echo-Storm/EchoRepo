@@ -242,7 +242,7 @@ class Main():
 		value  = 0
 
 		# Invalid index
-		if not idx:
+		if idx is None:
 			utils.log('Index invalid, weather data is not up to date ...', 3)
 			return
 
@@ -397,7 +397,7 @@ class Main():
 		else:
 			count = 0
 
-		if not idx:
+		if idx is None:
 			utils.log('Index invalid, weather data is not up to date ...', 3)
 			return
 
@@ -489,6 +489,9 @@ class Main():
 			now = utils.dt('nowutcstamp')
 
 			for frame in frames:
+				if utils.monitor.abortRequested():
+					utils.log(f'[LOC{config.loc.id}] Abort requested, stopping radar download', 3)
+					break
 				offset = frame['offset']
 				layer = frame['layer']
 				# Synthetic timestamp: now minus offset (in seconds)
@@ -562,7 +565,7 @@ class Main():
 			# Files - now in subfolder
 			dir     = f'{config.addon_cache}/{config.loc.id}'
 			subdir  = f'{dir}/{layer}'
-			files   = sorted(list(Path(subdir).glob('*.png')), reverse=True) if Path(subdir).exists() else []
+			files   = sorted([f for f in Path(subdir).glob('*.png') if f.stem.isdigit()], reverse=True) if Path(subdir).exists() else []
 			history = config.addon.maphistory
 			osm_exists = Path(f'{dir}/osm.png').exists()
 
@@ -749,7 +752,7 @@ class Main():
 	### NOTIFICATION
 	def notification(self):
 		queue    = config.addon.msgqueue
-		duration = utils.setting('alert_duration', 'int')
+		duration = max(3, utils.setting('alert_duration', 'int'))
 
 		if queue:
 			for alert in queue:

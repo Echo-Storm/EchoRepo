@@ -50,10 +50,16 @@ def setting(arg, type='str', cache=False):
 
 	# Type
 	if type == 'int':
-		return int(value)
+		try:
+			return int(value)
+		except (ValueError, TypeError):
+			return 0
 
 	elif type == 'float':
-		return float(value)
+		try:
+			return float(value)
+		except (ValueError, TypeError):
+			return 0.0
 
 	elif type == 'bool':
 
@@ -124,7 +130,7 @@ def locaddon(arg):
 def notification(header, msg, icon, locid):
 	log(f'[LOC{locid}] Notification: {header} - {msg}')
 
-	duration = (int(setting('alert_duration')) - 2) * 1000
+	duration = (setting('alert_duration', 'int') - 2) * 1000
 	xbmcgui.Dialog().notification(header, msg, icon, int(duration))
 
 # Datetime
@@ -224,7 +230,7 @@ def getprop(data, map, idx, count):
 
 	# WMO (isday)
 	if unit.startswith('wmo') or unit == 'image' or unit == 'code':
-		if idx:
+		if idx is not None:
 			try:
 				if data[map[1][0]]['is_day'][idx] == 1:
 					isday = 'd'
@@ -380,6 +386,10 @@ def getprop(data, map, idx, count):
 		content   = None
 		alerting  = setting(f'alert_{type.split(".")[0]}_enabled', 'bool', True)
 
+		# Guard: index not found (weather data not yet loaded)
+		if idxnow is None:
+			return content
+
 		# Data
 		lv = []
 		lt = []
@@ -399,6 +409,10 @@ def getprop(data, map, idx, count):
 		unit = conv.item(False, unit)
 
 		addprop(f'{property}.unit', unit)
+
+		# Guard: no usable data for this graph
+		if not lc:
+			return content
 
 		# Neg
 		scaleneg = bool([ v for v in lc if v < 0 ])

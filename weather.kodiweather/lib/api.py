@@ -79,6 +79,8 @@ def geturl(url, head=False):
 def getdata(type, loc, map=None):
 
 	# URL
+	url = None
+
 	if type == 'weather':
 		url = config.map_api.get(type).format(map[0], map[1], config.maxdays)
 	elif type == 'airquality':
@@ -87,6 +89,10 @@ def getdata(type, loc, map=None):
 		url = config.map_api.get(type).format(map[0], map[1], map[2])
 	elif type == 'moon':
 		url = config.map_api.get(type).format(map[0], map[1], map[2])
+
+	if url is None:
+		utils.log(f'getdata: unknown data type {type!r}, skipping', 2)
+		return
 
 	# Weather
 	file = f'{config.addon_cache}/{loc}/{type}.json'
@@ -111,6 +117,8 @@ def getnoaalerts(locid, lat, lon):
 
 def getmap(map, head=False):
 
+	url = None
+
 	if map[1] == 'osm':
 		# Use selected map provider (defaults to osm)
 		provider = config.addon.mapprovider
@@ -123,9 +131,22 @@ def getmap(map, head=False):
 		layer = map[8]  # Layer name (e.g., 'nexrad-n0q' or 'nexrad-n0q-m05m')
 		url = config.map_api.get('iemradar').format(server, layer, map[3], map[4], map[5])
 	elif map[1] == 'gctemp':
-		url = config.map_api.get(map[1]).format(map[10], map[11], map[12], map[13])
+		url_template = config.map_api.get(map[1])
+		if not url_template:
+			utils.log(f'gctemp API not configured', 2)
+			return
+		url = url_template.format(map[10], map[11], map[12], map[13])
 	elif map[1] == 'gcwind':
-		url = config.map_api.get(map[1]).format(map[10], map[11], map[12], map[13])
+		url_template = config.map_api.get(map[1])
+		if not url_template:
+			utils.log(f'gcwind API not configured', 2)
+			return
+		url = url_template.format(map[10], map[11], map[12], map[13])
+
+	# Guard: url was never set (unknown map type)
+	if url is None:
+		utils.log(f'getmap: unknown map type {map[1]!r}, skipping', 2)
+		return
 
 	# HEAD
 	if head:
@@ -157,7 +178,10 @@ def mapmerge(map):
 		image.paste(tile, (item[6], item[7]))
 
 	if map[0][1] == 'osm':
-		image.save(f'{config.addon_cache}/{map[0][0]}/{map[0][1]}.png')
+		try:
+			image.save(f'{config.addon_cache}/{map[0][0]}/{map[0][1]}.png')
+		except Exception as e:
+			utils.log(f'Failed to save OSM map: {e}', 2)
 	else:
 		# Burn timestamp into radar/satellite frames
 		try:
@@ -219,13 +243,19 @@ def getloc(locid):
 
 	# Get location
 	try:
-		data    = json.loads(geturl(config.map_api.get('geoip')))
+		raw_geoip = geturl(config.map_api.get('geoip'))
+		if not raw_geoip:
+			raise RuntimeError('GeoIP request returned no data')
+		data    = json.loads(raw_geoip)
 		city    = data['city']
 		region  = data.get('regionName')
 		country = data.get('countryCode')
 
 		# Search
-		data     = json.loads(geturl(config.map_api.get('search').format(city)))
+		raw_search = geturl(config.map_api.get('search').format(city))
+		if not raw_search:
+			raise RuntimeError(f'Location search for {city!r} returned no data')
+		data     = json.loads(raw_search)
 		location = data['results'][0]
 
 		for item in data['results']:
@@ -294,7 +324,10 @@ def setloc (locid):
 			try:
 				locs   = []
 				url    = config.map_api.get('search').format(search)
-				data   = json.loads(geturl(url))['results']
+				raw    = geturl(url)
+				if not raw:
+					raise RuntimeError('Search returned no data')
+				data   = json.loads(raw)['results']
 			except:
 				utils.log(f'[LOC{locid}] No results')
 				dialog.ok('Kodi Weather', utils.loc(284))
@@ -335,7 +368,7 @@ def setloc (locid):
 					clearloc(locid, True)
 
 					# Refresh
-					if int(utils.settingrpc("weather.currentlocation")) == int(locid):
+					if int(utils.settingrpc("weather.currentlocation") or 1) == int(locid):
 						weather.Main(str(locid), mode='download')
 						weather.Main(str(locid), mode='update')
 					else:

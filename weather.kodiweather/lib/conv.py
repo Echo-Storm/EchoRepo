@@ -365,7 +365,10 @@ def pressure(value=False):
 
 # Decimal places
 def dp(value, setting):
-	value = float(value)
+	try:
+		value = float(value)
+	except (TypeError, ValueError):
+		return 0
 
 	if setting == '0':
 		return round(value)

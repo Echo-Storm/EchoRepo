@@ -35,6 +35,8 @@ iem_frame_offsets = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
 # Limits
 try:
 	maxdays = utils.setting('fcdays', 'int')
+	if maxdays < 3:
+		maxdays = 8  # Fallback if setting is missing, zero, or corrupt
 except (ValueError, TypeError):
 	maxdays = 8  # Fallback default if setting not available at import
 mindays  = 1
@@ -839,7 +841,7 @@ def addon(cache=False):
 	# Int
 	addon.mapzoom     = utils.setting('mapzoom', 'int', cache)
 	addon.maphistory  = utils.setting('maphistory', 'int', cache)
-	addon.alerthours  = utils.setting('alert_hours', 'int', cache)
+	addon.alerthours  = max(1, utils.setting('alert_hours', 'int', cache))
 	addon.fcstart     = utils.setting('fcstart', 'int', cache)
 	addon.fcend       = utils.setting('fcend', 'int', cache)
 
@@ -864,7 +866,7 @@ def kodi():
 def loc(locid, cache=False):
 	loc.prop = {}
 	loc.id   = locid
-	loc.cid  = str(utils.settingrpc("weather.currentlocation"))
+	loc.cid  = str(utils.settingrpc("weather.currentlocation") or 1)
 	loc.lat  = utils.setting(f'loc{locid}lat', 'float')
 	loc.lon  = utils.setting(f'loc{locid}lon', 'float')
 	loc.utz  = utils.setting(f'loc{locid}utz', 'bool')
