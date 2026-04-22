@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Echo-Storm Kodi Repository</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0d0d0d;
+    color: #c8c8c8;
+    font-family: 'Segoe UI', Consolas, monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+
+  header h1 {
+    font-size: 2rem;
+    color: #7cb342;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  header p {
+    color: #666;
+    margin-top: 8px;
+    font-size: 0.9rem;
+  }
+
+  .card {
+    background: #161616;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    padding: 24px 28px;
+    width: 100%;
+    max-width: 680px;
+    margin-bottom: 20px;
+  }
+
+  .card h2 {
+    color: #7cb342;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid #2a2a2a;
+    padding-bottom: 8px;
+  }
+
+  .url-box {
+    background: #0a0a0a;
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 12px 14px;
+    font-family: Consolas, monospace;
+    font-size: 0.82rem;
+    color: #aaa;
+    word-break: break-all;
+    margin-bottom: 10px;
+    position: relative;
+  }
+
+  .url-box .label {
+    color: #555;
+    font-size: 0.72rem;
+    display: block;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .url-box .value {
+    color: #7cb342;
+  }
+
+  .step {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    margin-bottom: 14px;
+  }
+
+  .step-num {
+    background: #7cb342;
+    color: #0d0d0d;
+    font-weight: bold;
+    font-size: 0.75rem;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .step-text {
+    font-size: 0.88rem;
+    line-height: 1.5;
+    color: #bbb;
+  }
+
+  .step-text code {
+    background: #0a0a0a;
+    border: 1px solid #333;
+    padding: 1px 6px;
+    border-radius: 3px;
+    color: #7cb342;
+    font-size: 0.82rem;
+    font-family: Consolas, monospace;
+  }
+
+  .addons-list {
+    list-style: none;
+  }
+
+  .addons-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid #1e1e1e;
+    font-size: 0.88rem;
+  }
+
+  .addons-list li:last-child { border-bottom: none; }
+
+  .addon-id { color: #bbb; font-family: Consolas, monospace; }
+  .addon-ver { color: #555; font-size: 0.78rem; }
+
+  footer {
+    color: #333;
+    font-size: 0.78rem;
+    margin-top: 20px;
+    text-align: center;
+  }
+
+  footer a { color: #7cb342; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⚡ Echo-Storm Repository</h1>
+  <p>Personal Kodi addon repository — Echo-Storm</p>
+</header>
+
+<div class="card">
+  <h2>Install Repository</h2>
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-text">
+      In Kodi: <code>Settings → Add-ons → Install from zip file</code><br>
+      Enable <em>"Unknown sources"</em> if prompted.
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-text">
+      Add this URL as a file source, or paste it directly when prompted:
+    </div>
+  </div>
+
+  <div class="url-box">
+    <span class="label">Repository Zip URL</span>
+    <span class="value" id="install-url">Loading...</span>
+  </div>
+
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-text">
+      After installing the repo addon, go to <code>Add-ons → Install from repository → Echo-Storm Repository</code> to browse and install addons.
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Addon Index</h2>
+
+  <div class="url-box" style="margin-bottom:16px;">
+    <span class="label">addons.xml</span>
+    <span class="value">https://raw.githubusercontent.com/Echo-Storm/EchoRepo/main/zips/addons.xml</span>
+  </div>
+
+  <ul class="addons-list" id="addon-list">
+    <li><span class="addon-id" style="color:#444">Loading addon list...</span></li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>Source URLs (for Kodi File Manager)</h2>
+
+  <div class="url-box">
+    <span class="label">Data Dir (add this in Kodi File Manager → Add source)</span>
+    <span class="value">https://raw.githubusercontent.com/Echo-Storm/EchoRepo/main/zips/</span>
+  </div>
+</div>
+
+<footer>
+  <a href="https://github.com/Echo-Storm/EchoRepo">GitHub Repository</a> &nbsp;·&nbsp;
+  Echo-Storm &nbsp;·&nbsp;
+  Kodi Repository
+</footer>
+
+<script>
+  const ADDONS_XML_URL = "https://raw.githubusercontent.com/Echo-Storm/EchoRepo/main/zips/addons.xml";
+  const ZIPS_BASE = "https://raw.githubusercontent.com/Echo-Storm/EchoRepo/main/zips/";
+
+  async function loadAddons() {
+    try {
+      const resp = await fetch(ADDONS_XML_URL);
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      const text = await resp.text();
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(text, "text/xml");
+      const addons = doc.querySelectorAll("addon");
+
+      const list = document.getElementById("addon-list");
+      list.innerHTML = "";
+
+      let repoZipUrl = null;
+
+      addons.forEach(addon => {
+        const id = addon.getAttribute("id");
+        const ver = addon.getAttribute("version");
+        const name = addon.getAttribute("name") || id;
+
+        const li = document.createElement("li");
+        li.innerHTML = `<span class="addon-id">${name} <span style="color:#444">(${id})</span></span>
+                        <span class="addon-ver">v${ver}</span>`;
+        list.appendChild(li);
+
+        if (id === "repository.echostorm") {
+          repoZipUrl = `${ZIPS_BASE}${id}/${id}-${ver}.zip`;
+        }
+      });
+
+      if (repoZipUrl) {
+        document.getElementById("install-url").textContent = repoZipUrl;
+      } else {
+        document.getElementById("install-url").textContent = "Could not determine install URL from addons.xml";
+      }
+
+      if (list.children.length === 0) {
+        list.innerHTML = '<li><span class="addon-id" style="color:#444">No addons in index yet.</span></li>';
+      }
+
+    } catch (err) {
+      document.getElementById("install-url").textContent = "Error loading — check GitHub Actions / Pages config";
+      document.getElementById("addon-list").innerHTML =
+        '<li><span class="addon-id" style="color:#c0392b">Could not fetch addons.xml: ' + err.message + '</span></li>';
+    }
+  }
+
+  loadAddons();
+</script>
+
+</body>
+</html>

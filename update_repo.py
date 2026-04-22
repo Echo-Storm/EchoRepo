@@ -17,6 +17,13 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from datetime import datetime
 
+# Force UTF-8 output on Windows (default console encoding is cp1252
+# which cannot encode characters like the checkmark/cross symbols).
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 # === Configuration ===
 REPO_ROOT = Path(__file__).parent.resolve()
 ZIPS_DIR = REPO_ROOT / "zips"
@@ -25,7 +32,7 @@ ADDONS_XML_MD5 = ZIPS_DIR / "addons.xml.md5"
 
 EXCLUDED_DIRS = {
     ".git", "__pycache__", "zips", ".vscode", ".idea",
-    "venv", "env", "node_modules"
+    "venv", "env", "node_modules", ".github"
 }
 
 EXCLUDED_FILES = {
@@ -123,7 +130,7 @@ def generate_addons_xml(addon_elements):
     ZIPS_DIR.mkdir(parents=True, exist_ok=True)
     tree.write(ADDONS_XML, encoding="UTF-8", xml_declaration=True)
 
-    print(f"\n✓ Generated {ADDONS_XML.relative_to(REPO_ROOT)}")
+    print(f"\n[OK] Generated {ADDONS_XML.relative_to(REPO_ROOT)}")
 
 def generate_md5():
     """Generate MD5 checksum for addons.xml."""
@@ -136,13 +143,17 @@ def generate_md5():
     checksum = md5_hash.hexdigest()
     ADDONS_XML_MD5.write_text(checksum)
 
-    print(f"✓ Generated {ADDONS_XML_MD5.relative_to(REPO_ROOT)}")
+    print(f"[OK] Generated {ADDONS_XML_MD5.relative_to(REPO_ROOT)}")
     print(f"  MD5: {checksum}")
 
 def bump_repo_version():
     """
     Increment the LAST numeric segment of the repository addon version by +1.
-    Example: 1.0.3.1.1 -> 1.0.3.1.2
+    Example: 1.0.3 -> 1.0.4
+    Returns the new version string, or None if no repo addon found.
+
+    IMPORTANT: This must be called BEFORE parse_addon_xml() reads the repo folder,
+    so that the bumped version is picked up during the main scan loop.
     """
     repo_folder = REPO_ROOT / "repository.echostorm"
     addon_xml = repo_folder / "addon.xml"
@@ -177,7 +188,7 @@ def bump_repo_version():
 
     tree.write(addon_xml, encoding="UTF-8", xml_declaration=True)
 
-    print(f"✓ Bumped repository version: {current_version} -> {new_version}")
+    print(f"[OK] Bumped repository version: {current_version} -> {new_version}")
     return new_version
 
 def git_commit_and_push():
@@ -198,20 +209,20 @@ def git_commit_and_push():
         cwd=REPO_ROOT, capture_output=True
     )
     if result.returncode == 0:
-        print("✓ No changes to commit")
+        print("[OK] No changes to commit")
         return
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
     commit_msg = f"Update repository - {timestamp}"
     subprocess.run(["git", "commit", "-m", commit_msg], cwd=REPO_ROOT, check=True)
-    print(f"✓ Committed: {commit_msg}")
+    print(f"[OK] Committed: {commit_msg}")
 
     try:
         subprocess.run(
             ["git", "push"],
-            cwd=REPO_ROOT, check=True, capture_output=True, text=True, timeout=30
+            cwd=REPO_ROOT, check=True, capture_output=True, text=True, timeout=60
         )
-        print("✓ Pushed to GitHub")
+        print("[OK] Pushed to GitHub")
     except subprocess.CalledProcessError as e:
         print(f" Push failed: {e.stderr}")
         print("  Run 'git push' manually")
@@ -223,7 +234,7 @@ def validate_only():
     print("=== Validation Mode ===\n")
     addon_folders = find_addon_folders()
     if not addon_folders:
-        print("✗ No addon folders found")
+        print("[!!] No addon folders found")
         return False
 
     all_valid = True
@@ -242,13 +253,13 @@ def validate_only():
             if missing:
                 print(f" {addon_id} v{version}: missing {', '.join(missing)}")
             else:
-                print(f"✓ {addon_id} v{version} ({name})")
+                print(f"[OK] {addon_id} v{version} ({name})")
 
         except Exception as e:
-            print(f"✗ {addon_path.name}: {e}")
+            print(f"[!!] {addon_path.name}: {e}")
             all_valid = False
 
-    print(f"\n{'✓ All addons valid' if all_valid else '✗ Validation failed'}")
+    print(f"\n{'[OK] All addons valid' if all_valid else '[!!] Validation failed'}")
     return all_valid
 
 # === Main ===
@@ -267,28 +278,31 @@ def main():
 
     ZIPS_DIR.mkdir(exist_ok=True)
 
+    # --- BUG FIX: bump version BEFORE scanning, so parse_addon_xml reads the
+    # new version from disk. Previously, bump happened after the scan loop,
+    # causing addons.xml to always contain the pre-bump version number. ---
+    bump_repo_version()
+
     addon_folders = find_addon_folders()
     if not addon_folders:
-        print("✗ No addon folders found (directories with addon.xml)")
+        print("[!!] No addon folders found (directories with addon.xml)")
         sys.exit(1)
 
-    print(f"Found {len(addon_folders)} addon(s):\n")
+    print(f"\nFound {len(addon_folders)} addon(s):\n")
 
     addon_elements = []
     for addon_path in addon_folders:
         addon_id, version, name, root_elem = parse_addon_xml(addon_path)
-        print(f"• {addon_id} v{version}")
+        print(f" - {addon_id} v{version}")
 
         create_addon_zip(addon_path, addon_id, version)
         addon_elements.append(root_elem)
-
-    bump_repo_version()
 
     generate_addons_xml(addon_elements)
     generate_md5()
 
     if no_commit:
-        print("\n✓ Skipped git operations (--no-commit)")
+        print("\n[OK] Skipped git operations (--no-commit)")
     else:
         git_commit_and_push()
 
@@ -296,11 +310,11 @@ def main():
     print("Repository update complete!")
     print("=" * 60)
 
-    repo_addon = ZIPS_DIR / "repository.echostorm"
-    if repo_addon.exists():
-        zips = list(repo_addon.glob("repository.echostorm-*.zip"))
+    repo_addon_dir = ZIPS_DIR / "repository.echostorm"
+    if repo_addon_dir.exists():
+        zips = list(repo_addon_dir.glob("repository.echostorm-*.zip"))
         if zips:
-            zip_name = zips[0].name
+            zip_name = sorted(zips)[-1].name
             print(f"\nInstall URL:")
             print(f"https://raw.githubusercontent.com/Echo-Storm/EchoRepo/main/zips/repository.echostorm/{zip_name}")
 
@@ -311,5 +325,5 @@ if __name__ == "__main__":
         print("\n\nAborted.")
         sys.exit(1)
     except Exception as e:
-        print(f"\n✗ Error: {e}", file=sys.stderr)
+        print(f"\n[!!] Error: {e}", file=sys.stderr)
         sys.exit(1)
