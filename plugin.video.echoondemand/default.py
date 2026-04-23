@@ -1,28 +1,53 @@
 #!/usr/bin/env python3
 """
-plugin.video.echoondemand — Echo OnDemand  v1.1.0
+plugin.video.echoondemand — Echo OnDemand  v2.0.0
 Kodi Omega (v21) plugin for browsing and playing VOD content (Movies and Series)
 from an Xtream Codes IPTV service.
 
-Changes in 1.0.1 (Omega bugfix):
-  - All setInfo('video', {...}) replaced with getVideoInfoTag() / InfoTagVideo API.
-    setInfo is deprecated in Kodi 20+ and causes log noise; InfoTagVideo is the
-    correct path for Nexus/Omega.
-  - Cast field fixed: was passing list[str], must be list[xbmc.Actor] in Omega.
-  - list_episodes: episode_num sort now guards against None and non-digit values.
-  - list_root folder items: removed unnecessary setInfo on non-video folder items.
-  - addon.xml: version bumped to 1.0.1; xbmc.python pinned to 3.0.0 (Omega minimum).
+Changes in 2.0.0 (final polish pass):
+  - list_root: setContent changed from 'videos' to 'addons'. 'videos' triggered
+    the skin's episode info panel (control 8001) which rendered the addon icon at
+    the top and left an empty text box below it. 'addons' uses the simple poster
+    panel instead — clean icon display, no dead space.
+  - Removed unused URLError import (api_get docstring is the documentation; all
+    callers use except Exception which already catches it).
+  - Stale 'icons restored' comment removed from list_series_categories.
+  - Companion skin edits (MyVideoNav.xml, View_50_List.xml):
+      * Plot synopsis overlay restricted to movies + tvshows — removed from
+        episodes where the skin already provides a full right-side info panel.
+      * Genre category right-panel suppressed in VideoList and SlimVideoList via
+        Container.Content(files) + Container.PluginName condition.
+      * InfoPanel overlay (views 52-59) also suppressed for category views.
+      * Duplicate IsCollection label removed from VideoList movies itemlayout.
+      * Ghost control 4421 reference removed from MyVideoNav.xml.
+
+Changes in 1.3.1 (audit + cosmetic fixes):
+  - credentials_ok() now guarded in list_movie_categories/list_series_categories
+    so deep links (favourites, skin widgets) show a proper "configure credentials"
+    dialog instead of a raw API error.
+  - cat_name threaded through URL params; list_movies/list_series now call
+    setPluginCategory with the actual genre name for correct breadcrumb display.
+  - list_series: added empty-list guard (notification + endOfDirectory succeeded=False)
+    to match list_movies behaviour.
+  - list_episodes: added empty-episode-list guard for the same reason.
+  - list_seasons: setContent changed from 'tvshows' to 'seasons' (correct Kodi type).
+  - Refresh item: isFolder changed False→True (was misusing the playable-item contract).
+  - play_movie: TMDB fetch moved to after _apply_buffer so it truly runs while the
+    stream is already playing, not before the buffer cycle starts.
+  - _apply_buffer docstring: removed stale "show notification toast" step.
+  - Category list items use Content('files') to drive right-panel suppression at
+    the skin level rather than manipulating art keys.
 
 Routing:
   (root)                                    -> list_root()
-  mode=movie_cats                           -> list_movie_categories()
-  mode=movies       cat_id=X               -> list_movies(cat_id)
-  mode=series_cats                          -> list_series_categories()
-  mode=series       cat_id=X               -> list_series(cat_id)
-  mode=seasons      series_id=X            -> list_seasons(series_id)
-  mode=episodes     series_id=X  season=N  -> list_episodes(series_id, season_num)
-  mode=play_movie   vod_id=X     ext=Y     -> play_movie(vod_id, ext)
-  mode=refresh                             -> clear all cache, go to root
+  mode=movie_cats                                   -> list_movie_categories()
+  mode=movies       cat_id=X  cat_name=Y            -> list_movies(cat_id, cat_name)
+  mode=series_cats                                  -> list_series_categories()
+  mode=series       cat_id=X  cat_name=Y            -> list_series(cat_id, cat_name)
+  mode=seasons      series_id=X                     -> list_seasons(series_id)
+  mode=episodes     series_id=X  season=N           -> list_episodes(series_id, season_num)
+  mode=play_movie   vod_id=X     ext=Y              -> play_movie(vod_id, ext)
+  mode=refresh                                      -> clear all cache, go to root
 
 Cache strategy (all files live in addon profile dir):
   movie_cats.json          TTL 1 hour   -- list of movie genre categories
@@ -49,7 +74,6 @@ import time
 import glob
 from urllib.parse import parse_qsl, urlencode
 from urllib.request import urlopen, Request
-from urllib.error import URLError
 
 import xbmc
 import xbmcgui
@@ -249,7 +273,8 @@ def _save_tmdb_cache(cache):
 def fetch_and_cache_tmdb_fanart(name, year):
     """
     Search TMDB for a movie by name+year, cache and return its backdrop URL.
-    Called during play_movie so the buffer period absorbs the network latency.
+    Called after _apply_buffer in play_movie — the plugin process stays alive
+    after setResolvedUrl so this runs while the stream is already playing.
     Returns '' on any failure (missing key, network error, no results).
     """
     api_key = _tmdb_key()
@@ -541,9 +566,8 @@ def _apply_buffer(buffer_secs):
     Strategy:
       1. Poll until xbmc.Player.isPlaying() — up to 12 seconds.
       2. Pause.
-      3. Show a 'Buffering' notification toast.
-      4. Sleep buffer_secs.
-      5. Resume — but only if the player is still paused.
+      3. Sleep buffer_secs silently — no toast, no dialog.
+      4. Resume — but only if the player is still paused.
          xbmc.Player.isPaused() does NOT exist in Kodi Omega; use
          xbmc.getCondVisibility('Player.Paused') instead.
 
@@ -674,7 +698,10 @@ def list_root():
         return
 
     xbmcplugin.setPluginCategory(HANDLE, 'Echo OnDemand')
-    xbmcplugin.setContent(HANDLE, 'videos')
+    # 'addons' suppresses the episode info panel (control 8001 in View_50_List.xml)
+    # which shows for 'videos' content and leaves an empty text box below the icon.
+    # 'addons' renders the addon icon cleanly in the simple poster panel instead.
+    xbmcplugin.setContent(HANDLE, 'addons')
 
     li = xbmcgui.ListItem(label='Movies', offscreen=True)
     li.setArt({'icon': ADDON_ICON, 'thumb': ADDON_ICON, 'fanart': ADDON_FANART})
@@ -688,7 +715,7 @@ def list_root():
     li = xbmcgui.ListItem(label='Refresh / Clear Cache', offscreen=True)
     li.setArt({'icon': ADDON_ICON, 'fanart': ADDON_FANART})
     li.setProperty('SpecialSort', 'bottom')
-    xbmcplugin.addDirectoryItem(HANDLE, build_url(mode='refresh'), li, isFolder=False)
+    xbmcplugin.addDirectoryItem(HANDLE, build_url(mode='refresh'), li, isFolder=True)
 
     xbmcplugin.endOfDirectory(HANDLE)
 
@@ -698,6 +725,8 @@ def list_root():
 # ---------------------------------------------------------------------------
 
 def list_movie_categories():
+    if not credentials_ok():
+        return
     try:
         cats = get_movie_categories()
     except Exception as e:
@@ -705,23 +734,30 @@ def list_movie_categories():
         return
 
     xbmcplugin.setPluginCategory(HANDLE, 'Echo OnDemand \u2014 Movies')
-    xbmcplugin.setContent(HANDLE, 'movies')
+    # 'files' instead of 'movies' — tells the skin this is a generic folder list,
+    # not a media library view. Aeon Nox Silvo suppresses the right-side info panel
+    # for file-browser content, which prevents the genre icons being scaled up.
+    xbmcplugin.setContent(HANDLE, 'files')
 
     for cat in sorted(cats, key=lambda c: c.get('category_name', '').lower()):
         name   = cat.get('category_name', 'Unknown')
         cat_id = str(cat.get('category_id', ''))
         icon   = get_genre_icon(name)
         li = xbmcgui.ListItem(label=name, offscreen=True)
+        # 'icon' = small list-row badge. 'thumb' is intentionally the same so the
+        # list row renders correctly. Content type 'files' (set above) is what we
+        # rely on to suppress the skin's large right-panel info slot — skins treat
+        # file-browser views differently from movie/tvshow library views.
         li.setArt({'icon': icon, 'thumb': icon, 'fanart': ADDON_FANART})
         xbmcplugin.addDirectoryItem(
-            HANDLE, build_url(mode='movies', cat_id=cat_id), li, isFolder=True
+            HANDLE, build_url(mode='movies', cat_id=cat_id, cat_name=name), li, isFolder=True
         )
 
     xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_LABEL)
     xbmcplugin.endOfDirectory(HANDLE)
 
 
-def list_movies(cat_id):
+def list_movies(cat_id, cat_name=''):
     try:
         movies = get_movies_for_category(cat_id)
     except Exception as e:
@@ -733,6 +769,9 @@ def list_movies(cat_id):
         xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
         return
 
+    xbmcplugin.setPluginCategory(
+        HANDLE, 'Echo OnDemand \u2014 {}'.format(cat_name if cat_name else 'Movies')
+    )
     xbmcplugin.setContent(HANDLE, 'movies')
 
     # Always load TMDB cache — it's just a local JSON read, zero API calls.
@@ -773,9 +812,15 @@ def list_movies(cat_id):
 
 def play_movie(vod_id, ext, vod_name='', vod_year=0):
     """
-    Resolve movie stream, then — during the pre-buffer pause — fetch and cache
-    TMDB fanart for this movie if a key is configured and it's not already cached.
-    The TMDB call is absorbed into the buffer window; no extra wait for the user.
+    Resolve movie stream URL, apply pre-buffer, then fetch and cache TMDB fanart.
+
+    Order is intentional:
+      1. setResolvedUrl  — Kodi begins loading the stream immediately.
+      2. _apply_buffer   — polls for playback start, pauses, sleeps, resumes.
+      3. TMDB fetch      — runs after the buffer ends; the plugin process stays
+                           alive after setResolvedUrl so this executes while the
+                           stream is already playing. Zero impact on perceived
+                           buffer length.
     """
     username, password = get_credentials()
     stream_url = '{}/movie/{}/{}/{}.{}'.format(SERVER, username, password, vod_id, ext)
@@ -783,11 +828,10 @@ def play_movie(vod_id, ext, vod_name='', vod_year=0):
     li = xbmcgui.ListItem(path=stream_url)
     li.setContentLookup(False)
     xbmcplugin.setResolvedUrl(HANDLE, True, li)
-    # Fetch TMDB fanart in the background while the player is starting up —
-    # result is cached so subsequent list loads show the backdrop immediately.
+    _apply_buffer(get_buffer_secs())
+    # TMDB fetch runs after the buffer completes — result cached for future list loads.
     if vod_name and _tmdb_key():
         fetch_and_cache_tmdb_fanart(vod_name, vod_year)
-    _apply_buffer(get_buffer_secs())
 
 
 def play_episode(ep_id, ext):
@@ -806,6 +850,8 @@ def play_episode(ep_id, ext):
 # ---------------------------------------------------------------------------
 
 def list_series_categories():
+    if not credentials_ok():
+        return
     try:
         cats = get_series_categories()
     except Exception as e:
@@ -813,29 +859,40 @@ def list_series_categories():
         return
 
     xbmcplugin.setPluginCategory(HANDLE, 'Echo OnDemand \u2014 Series')
-    xbmcplugin.setContent(HANDLE, 'tvshows')
+    # Same rationale as movie categories — 'files' to suppress skin info panel.
+    xbmcplugin.setContent(HANDLE, 'files')
 
     for cat in sorted(cats, key=lambda c: c.get('category_name', '').lower()):
         name   = cat.get('category_name', 'Unknown')
         cat_id = str(cat.get('category_id', ''))
         icon   = get_genre_icon(name)
         li = xbmcgui.ListItem(label=name, offscreen=True)
+        # Same as movie categories — genre badge in icon slot, Content(files) drives
+        # right-panel suppression at the skin level.
         li.setArt({'icon': icon, 'thumb': icon, 'fanart': ADDON_FANART})
         xbmcplugin.addDirectoryItem(
-            HANDLE, build_url(mode='series', cat_id=cat_id), li, isFolder=True
+            HANDLE, build_url(mode='series', cat_id=cat_id, cat_name=name), li, isFolder=True
         )
 
     xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_LABEL)
     xbmcplugin.endOfDirectory(HANDLE)
 
 
-def list_series(cat_id):
+def list_series(cat_id, cat_name=''):
     try:
         series_list = get_series_for_category(cat_id)
     except Exception as e:
         xbmcgui.Dialog().ok('Echo OnDemand', 'Error loading series:\n{}'.format(e))
         return
 
+    if not series_list:
+        xbmcgui.Dialog().notification('Echo OnDemand', 'No series found in this category.', time=3000)
+        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
+        return
+
+    xbmcplugin.setPluginCategory(
+        HANDLE, 'Echo OnDemand \u2014 {}'.format(cat_name if cat_name else 'Series')
+    )
     xbmcplugin.setContent(HANDLE, 'tvshows')
 
     for s in sorted(series_list, key=lambda x: x.get('name', '').lower()):
@@ -897,7 +954,7 @@ def list_seasons(series_id):
     series_cover   = series_meta.get('cover', '')
 
     xbmcplugin.setPluginCategory(HANDLE, 'Echo OnDemand \u2014 {}'.format(series_name))
-    xbmcplugin.setContent(HANDLE, 'tvshows')
+    xbmcplugin.setContent(HANDLE, 'seasons')
 
     season_meta = {}
     for s in seasons_api:
@@ -953,6 +1010,11 @@ def list_episodes(series_id, season_num):
         HANDLE, 'Echo OnDemand \u2014 {} S{}'.format(series_name, season_num)
     )
     xbmcplugin.setContent(HANDLE, 'episodes')
+
+    if not episodes:
+        xbmcgui.Dialog().notification('Echo OnDemand', 'No episodes found for this season.', time=3000)
+        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
+        return
 
     def ep_sort_key(ep):
         return safe_int(ep.get('episode_num', 0))
@@ -1010,6 +1072,7 @@ def router(paramstring):
     params    = dict(parse_qsl(paramstring.lstrip('?')))
     mode      = params.get('mode')
     cat_id    = params.get('cat_id', '')
+    cat_name  = params.get('cat_name', '')
     series_id = params.get('series_id', '')
     season    = params.get('season', '')
     vod_id    = params.get('vod_id', '')
@@ -1021,7 +1084,7 @@ def router(paramstring):
     if mode == 'movie_cats':
         list_movie_categories()
     elif mode == 'movies':
-        list_movies(cat_id)
+        list_movies(cat_id, cat_name)
     elif mode == 'play_movie':
         play_movie(vod_id, ext, vod_name, vod_year)
     elif mode == 'play_episode':
@@ -1029,7 +1092,7 @@ def router(paramstring):
     elif mode == 'series_cats':
         list_series_categories()
     elif mode == 'series':
-        list_series(cat_id)
+        list_series(cat_id, cat_name)
     elif mode == 'seasons':
         list_seasons(series_id)
     elif mode == 'episodes':

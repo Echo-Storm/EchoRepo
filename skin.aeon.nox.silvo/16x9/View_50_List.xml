@@ -100,15 +100,6 @@
 						</control>
 						<control type="label">
 							<left>135</left>
-							<width>790</width>
-							<height>120</height>
-							<font>font30</font>
-							<textcolor>grey2</textcolor>
-							<label>$INFO[ListItem.Label]</label>
-							<visible>ListItem.IsCollection</visible>
-						</control>
-						<control type="label">
-							<left>135</left>
 							<top>55</top>
 							<width>790</width>
 							<height>60</height>
@@ -1050,6 +1041,10 @@
 				<left>1320</left>
 				<top>200</top>
 				<visible>Container.Content(movies) | Container.Content(tvshows) | Container.Content(seasons) | Container.Content(musicvideos) | Container.Content(files) | Container.Content(addons) | Container.Content()</visible>
+				<!-- EchoOD: suppress right panel on genre category views. Content=files means  -->
+				<!-- movie/series category lists in this addon. Scoped tightly — no other addon  -->
+				<!-- or content type is affected.                                               -->
+				<visible>![String.IsEqual(Container.PluginName,plugin.video.echoondemand) + Container.Content(files)]</visible>
 				<include>VisibleFadeAnimation</include>
 				<control type="image">
 					<width>570</width>
@@ -2524,6 +2519,8 @@
 				<left>1296</left>
 				<top>175</top>
 				<visible>!Control.IsVisible(8001)</visible>
+				<!-- EchoOD: suppress right panel on genre category views (same scope as VideoList fix above) -->
+				<visible>![String.IsEqual(Container.PluginName,plugin.video.echoondemand) + Container.Content(files)]</visible>
 				<include>VisibleFadeAnimation</include>
 				<control type="image">
 					<width>570</width>

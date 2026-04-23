@@ -184,6 +184,10 @@
 			<include>CommonBackground</include>
 			<control type="group">
 				<visible>Control.IsVisible(52) | Control.IsVisible(53) | Control.IsVisible(57) | [Control.IsVisible(58) + Skin.HasSetting(BannerPlex) + Skin.HasSetting(Disable.BannerWallInfo)] | Control.IsVisible(59)</visible>
+				<!-- EchoOD: suppress info panel on genre category views. Content=files means   -->
+				<!-- we are in movie or series category lists, not deeper media views.           -->
+				<!-- Scoped to this addon only — no other addon or view is affected.            -->
+				<visible>![String.IsEqual(Container.PluginName,plugin.video.echoondemand) + Container.Content(files)]</visible>
 				<top>-30</top>
 				<include>InfoPanel</include>
 			</control>
@@ -1132,7 +1136,7 @@
 				     Tweak left/top/width/height if poster position differs.
 				     ═══════════════════════════════════════════════════════════ -->
 				<control type="group">
-					<visible>String.IsEqual(Container.PluginName,plugin.video.echoondemand) + [Container.Content(movies) | Container.Content(tvshows) | Container.Content(episodes)] + !String.IsEmpty(ListItem.Plot) + !ListItem.IsParentFolder</visible>
+					<visible>String.IsEqual(Container.PluginName,plugin.video.echoondemand) + [Container.Content(movies) | Container.Content(tvshows)] + !String.IsEmpty(ListItem.Plot) + !ListItem.IsParentFolder</visible>
 					<animation effect="fade" time="400" delay="300">Visible</animation>
 					<animation effect="fade" time="250">Hidden</animation>
 					<!-- Dark backing — colordiffuse must be a child element not texture attribute -->
@@ -1188,7 +1192,7 @@
 						<onclick>Skin.ToggleSetting(Enable.ManualInfoPanel)</onclick>
 						<onclick condition="!Skin.HasSetting(Enable.ManualInfoPanel)">Skin.Reset(InfoPanel.Delay)</onclick>
 						<selected>Skin.HasSetting(Enable.ManualInfoPanel)</selected>
-						<visible>!Container.Content(genres) + Window.IsActive(videos) + Control.IsVisible(6051) + [!String.IsEmpty(Control.GetLabel(4420)) | !String.IsEmpty(Control.GetLabel(4421))]</visible>
+						<visible>!Container.Content(genres) + Window.IsActive(videos) + Control.IsVisible(6051) + !String.IsEmpty(Control.GetLabel(4420))</visible>
 					</control>
 					<control type="button" id="201">
 						<description>View options</description>

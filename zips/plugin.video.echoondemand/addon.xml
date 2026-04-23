@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<addon id="plugin.video.echoondemand" name="Echo OnDemand" version="1.3.0" provider-name="Echo-Storm">
+<addon id="plugin.video.echoondemand" name="Echo OnDemand" version="2.0.0" provider-name="Echo-Storm">
   <requires>
     <import addon="xbmc.python" version="3.0.0"/>
     <import addon="xbmc.gui" version="5.17.0"/>
