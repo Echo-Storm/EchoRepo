@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<addon id="plugin.video.echoondemand" name="Echo OnDemand" version="1.3.0" provider-name="Echo-Storm">
+  <requires>
+    <import addon="xbmc.python" version="3.0.0"/>
+    <import addon="xbmc.gui" version="5.17.0"/>
+  </requires>
+  <extension point="xbmc.python.pluginsource" library="default.py">
+    <provides>video</provides>
+  </extension>
+  <extension point="xbmc.addon.metadata">
+    <summary lang="en_GB">Echo OnDemand — IPTV VOD Browser</summary>
+    <description lang="en_GB">Browse and play Movies and Series from your Xtream Codes IPTV service. Movies listed by genre. Series support full season and episode navigation. Results are cached locally to minimise API calls. Kodi Omega (v21) compatible. Genre icons, series fanart, pre-buffer, optional TMDB backdrop art.</description>
+    <platform>all</platform>
+    <assets>
+      <icon>icon.png</icon>
+      <fanart>fanart.jpg</fanart>
+    </assets>
+  </extension>
+</addon>

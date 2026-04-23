@@ -187,6 +187,7 @@
 				<top>-30</top>
 				<include>InfoPanel</include>
 			</control>
+
 			<control type="group">
 				<include>WindowOpenCloseAnimation</include>
 				<include condition="[!Skin.HasSetting(Enable.SlimList) + !System.AddonIsEnabled(script.skinvariables)] | [!Skin.HasSetting(Enable.SlimList) + $EXP[Exp_View_50_Include] + System.AddonIsEnabled(script.skinvariables)]">VideoList</include>
@@ -646,13 +647,13 @@
 									<include condition="!System.AddonIsEnabled(script.embuary.helper) + !System.AddonIsEnabled(plugin.video.themoviedb.helper)">NoRatingsHelperFlagAnimations</include>
 									<!-- ROTTENTOMATOES/METACRITIC/TMDb/TRAKT/IMDb -->
 									<control type="grouplist">
-										<width>340</width>
+										<width>480</width>
 										<orientation>horizontal</orientation>
 										<include condition="System.AddonIsEnabled(plugin.video.themoviedb.helper) | System.AddonIsEnabled(script.embuary.helper)">ScriptHelperFlags</include>
 									</control>
 									<!-- MEDIAFLAGS -->
 									<control type="grouplist">
-										<left>340</left>
+										<left>480</left>
 										<width>1500</width>
 										<orientation>horizontal</orientation>
 										<control type="group">
@@ -1121,6 +1122,41 @@
 				</control>
 				<!-- Scrollbars -->
 				<include>BottomScrollbars</include>
+				<!-- ═══════════════════════════════════════════════════════════
+				     Echo OnDemand: Plot synopsis overlay
+				     Locked to plugin.video.echoondemand only via
+				     Container.PluginName — does not fire in any other addon.
+				     Positioned over the TOP of the poster (most posters have
+				     their title at the bottom, leaving the top clear).
+				     Coordinates measured from screenshots at 1920×1080 virtual.
+				     Tweak left/top/width/height if poster position differs.
+				     ═══════════════════════════════════════════════════════════ -->
+				<control type="group">
+					<visible>String.IsEqual(Container.PluginName,plugin.video.echoondemand) + [Container.Content(movies) | Container.Content(tvshows) | Container.Content(episodes)] + !String.IsEmpty(ListItem.Plot) + !ListItem.IsParentFolder</visible>
+					<animation effect="fade" time="400" delay="300">Visible</animation>
+					<animation effect="fade" time="250">Hidden</animation>
+					<!-- Dark backing — colordiffuse must be a child element not texture attribute -->
+					<control type="image">
+						<left>1248</left>
+						<top>58</top>
+						<width>648</width>
+						<height>142</height>
+						<texture>colors/black.png</texture>
+						<colordiffuse>D1000000</colordiffuse>
+					</control>
+					<!-- Plot text — autoscroll: 1.5s delay, 4s scroll, loops at 5.5s -->
+					<control type="textbox">
+						<left>1254</left>
+						<top>64</top>
+						<width>636</width>
+						<height>130</height>
+						<font>font12</font>
+						<textcolor>FFFFFFFF</textcolor>
+						<shadowcolor>shadow</shadowcolor>
+						<label>$INFO[ListItem.Plot]</label>
+						<autoscroll delay="1500" time="4000" repeat="5500"/>
+					</control>
+				</control>
 			</control>
 			<include condition="!Skin.HasSetting(Disable.ScrollLabel)">ScrollOffsetLabel</include>
 			<include>Topbar</include>

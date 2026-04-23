@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<settings>
+  <setting id="username" type="text" label="Username" default=""/>
+  <setting id="password" type="text" option="hidden" label="Password" default=""/>
+  <setting id="buffer_secs" type="slider" label="Pre-buffer seconds (0 = disabled)" default="5" range="0,1,10" option="int"/>
+  <setting id="tmdb_api_key" type="text" label="TMDB API Key (optional — enables movie fanart)" default=""/>
+</settings>
