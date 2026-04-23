@@ -234,7 +234,7 @@
             </assets>
         </extension>
     </addon>
-    <addon id="skin.aeon.nox.silvo" version="40.0.7" name="Aeon Nox: SiLVO - Echostorm Edition" provider-name="Echo-Storm">
+    <addon id="skin.aeon.nox.silvo" version="40.0.8" name="Aeon Nox: SiLVO - Echostorm Edition" provider-name="Echo-Storm">
         <requires>
             <import addon="xbmc.gui" version="5.17.0" />
             <import addon="script.skinshortcuts" version="2.0.1" />
