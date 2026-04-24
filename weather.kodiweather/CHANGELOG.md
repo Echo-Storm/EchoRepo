@@ -2,6 +2,21 @@
 
 All notable changes to weather.kodiweather.
 
+## [2.4.7] - 2026-04-24
+
+### Fixed — Home screen background stability
+
+- **lib/config.py**: Added `get_fanartbg(code, locid)` — picks one image from the fanart resource folder when the weather code changes and holds it for the session. Previously the skin's `multiimage` control received a folder URI and cycled through every image in it on a timer, causing constant background changes unrelated to actual weather updates.
+- **lib/config.py**: Added `_fanartbg_state` module-level dict to persist the selected image across service ticks without re-picking unless the weather condition or day/night state actually changes.
+- **lib/weather.py**: `setother()` now sets `current.fanartbg` window property (a `special://` path to a specific image file) alongside the existing `current.fanartcode`. The skin reads this for the home screen background.
+- **lib/service.py**: Added startup cache pre-load — on first service tick, `mode='update'` runs immediately from cached JSON before any network download. The background now appears within a second of Kodi start rather than waiting for the full download cycle to complete.
+
+### Skin — Includes_Backgrounds.xml (companion change, not in this zip)
+
+- **HomeFanart** include: inserted a permanent weather background layer (`current.fanartbg`) between the black base and the library fanart `multiimage`. When the library multiimage fades out (e.g. navigating to Settings or Add-ons which have no fanart), the background now falls through to the stable weather image instead of going black.
+
+---
+
 ## [2.4.6] - 2026-04-21
 
 ### Fixed — 24 bugs fixed across 3 audit passes

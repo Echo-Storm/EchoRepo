@@ -235,7 +235,7 @@
             </assets>
         </extension>
     </addon>
-    <addon id="skin.aeon.nox.silvo" version="40.0.8" name="Aeon Nox: SiLVO - Echostorm Edition" provider-name="Echo-Storm">
+    <addon id="skin.aeon.nox.silvo" version="40.0.9" name="Aeon Nox: SiLVO - Echostorm Edition" provider-name="Echo-Storm">
         <requires>
             <import addon="xbmc.gui" version="5.17.0" />
             <import addon="script.skinshortcuts" version="2.0.1" />
@@ -262,7 +262,7 @@
             <news>[I][COLOR FFFF9800]v40.0.5 - Echostorm Edition[/COLOR][/I][CR]- Packed textures for faster loading[CR]- Trimmed extras for smaller footprint[CR]- Private release</news>
         </extension>
     </addon>
-    <addon id="weather.kodiweather" name="Kodi Weather" version="2.4.6" provider-name="Echo-Storm">
+    <addon id="weather.kodiweather" name="Kodi Weather" version="2.4.7" provider-name="Echo-Storm">
         <requires>
             <import addon="xbmc.python" version="3.0.0" />
             <import addon="script.module.requests" version="2.27.1+matrix.1" />

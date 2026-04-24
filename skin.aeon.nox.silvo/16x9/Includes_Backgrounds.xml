@@ -164,10 +164,27 @@
 		</control>
 	</include>
 	<include name="HomeFanart">
+		<!-- Layer 1: Black base, always visible. -->
 		<control type="image">
 			<include>FullscreenDimensions</include>
 			<texture>colors/black.png</texture>
 		</control>
+		<!-- Layer 2: Stable weather background.
+		     Reads current.fanartbg from the weather addon — a specific image
+		     file chosen when the weather condition or day/night state changes
+		     and held until the next real change.  This layer is always loaded
+		     and never cycles, so there is no black flash when the library
+		     multiimage above it fades out (e.g. navigating to Settings or
+		     Add-ons which have no fanart). -->
+		<control type="image">
+			<include>FullscreenDimensions</include>
+			<texture background="true">$INFO[Window(Weather).Property(current.fanartbg)]</texture>
+			<fadetime>FanartCrossfadeTime</fadetime>
+			<visible>!String.IsEmpty(Window(Weather).Property(current.fanartbg))</visible>
+		</control>
+		<!-- Layer 3: Library fanart multiimage.
+		     Cycles through media fanart when available; fades out cleanly to
+		     the weather layer (not black) when nothing is focused. -->
 		<control type="group">
 			<include condition="Skin.HasSetting(Enable.AnimatedBackgrounds)">AnimatedBackgroundAnimation</include>
 			<control type="multiimage">
