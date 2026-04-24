@@ -1,8 +1,21 @@
 #!/usr/bin/env python3
 """
-plugin.video.echoondemand — Echo OnDemand  v2.0.0
+plugin.video.echoondemand — Echo OnDemand  v2.1.0
 Kodi Omega (v21) plugin for browsing and playing VOD content (Movies and Series)
-from an Xtream Codes IPTV service.
+from an Xtream Codes IPTV service, plus Wrestling Rewind replays via debrid.
+
+Changes in 2.1.0 (Wrestling Rewind integration):
+  - Added Wrestling Rewind section to root menu.
+  - resources/lib/wrestling.py: pure data layer — fetch, parse, resolve.
+    Handles MicroJen XML and JSON feed formats with 3-pass XML recovery.
+  - list_wr(): navigates WR XML/JSON directory feeds, same caching pattern
+    as the rest of the addon.
+  - play_wr(): debrid-first resolution via resolveurl, silent direct-link
+    fallback.  No link chooser dialog — seamless like the rest of the addon.
+  - Pre-buffer applied to WR playback using the same setting as IPTV.
+  - addon.xml: script.module.resolveurl added as required dependency.
+  - settings.xml: wr_root_url (overridable feed URL) + wr_cache_ttl.
+  - Routing: wr_list, wr_play modes added.
 
 Changes in 2.0.0 (final polish pass):
   - list_root: setContent changed from 'videos' to 'addons'. 'videos' triggered
@@ -47,6 +60,8 @@ Routing:
   mode=seasons      series_id=X                     -> list_seasons(series_id)
   mode=episodes     series_id=X  season=N           -> list_episodes(series_id, season_num)
   mode=play_movie   vod_id=X     ext=Y              -> play_movie(vod_id, ext)
+  mode=wr_list      wr_url=X    [wr_title=Y]        -> list_wr(wr_url, wr_title)
+  mode=wr_play      wr_item=X                       -> play_wr(wr_item)
   mode=refresh                                      -> clear all cache, go to root
 
 Cache strategy (all files live in addon profile dir):
@@ -80,6 +95,8 @@ import xbmcgui
 import xbmcplugin
 import xbmcaddon
 import xbmcvfs
+
+from resources.lib import wrestling as _wr
 
 # ---------------------------------------------------------------------------
 # Bootstrap
@@ -711,6 +728,16 @@ def list_root():
     li.setArt({'icon': ADDON_ICON, 'thumb': ADDON_ICON, 'fanart': ADDON_FANART})
     xbmcplugin.addDirectoryItem(HANDLE, build_url(mode='series_cats'), li, isFolder=True)
 
+    wr_root = ADDON.getSetting('wr_root_url').strip()
+    if not wr_root:
+        wr_root = 'https://mylostsoulspace.co.uk/WrestlingRewind/xmls/wrestlingrewind-main.xml'
+    li = xbmcgui.ListItem(label='Wrestling Rewind', offscreen=True)
+    li.setArt({'icon': ADDON_ICON, 'thumb': ADDON_ICON, 'fanart': ADDON_FANART})
+    xbmcplugin.addDirectoryItem(
+        HANDLE, build_url(mode='wr_list', wr_url=wr_root, wr_title='Wrestling Rewind'),
+        li, isFolder=True
+    )
+
     # Pinned to bottom of the list so it stays out of the way.
     li = xbmcgui.ListItem(label='Refresh / Clear Cache', offscreen=True)
     li.setArt({'icon': ADDON_ICON, 'fanart': ADDON_FANART})
@@ -1055,6 +1082,164 @@ def list_episodes(series_id, season_num):
 
 
 # ---------------------------------------------------------------------------
+# Wrestling Rewind views
+# ---------------------------------------------------------------------------
+# These functions handle navigation of MicroJen XML/JSON feeds from the
+# Wrestling Rewind service.  All feed fetching, parsing, and link resolution
+# is delegated to resources/lib/wrestling.py (pure data layer).
+#
+# list_wr() and play_wr() follow exactly the same patterns as the rest of
+# this file: profile-dir caching, error dialogs, setContent, _apply_buffer.
+
+
+def _wr_ttl():
+    """Read WR cache TTL from settings. Returns seconds. Default 30 minutes."""
+    try:
+        return max(60, int(float(ADDON.getSetting('wr_cache_ttl') or '30')) * 60)
+    except (ValueError, TypeError):
+        return 1800
+
+
+def list_wr(wr_url, wr_title='Wrestling Rewind'):
+    """
+    Fetch and display one level of a Wrestling Rewind MicroJen feed.
+
+    Folders (type=dir) route back to list_wr with the sub-feed URL.
+    Playable items (type=item) route to play_wr with the item encoded as
+    base64 JSON — same pattern used internally by Wrestling Rewind itself,
+    kept here because it handles lists of sublinks cleanly in a single URL
+    parameter without per-field encoding gymnastics.
+    """
+    import base64
+
+    profile = _profile_dir()
+    ttl     = _wr_ttl()
+
+    # Fetch (or serve from cache)
+    text = _wr.cache_load(profile, wr_url, ttl)
+    if text is None:
+        try:
+            text = _wr.fetch_feed(wr_url)
+            _wr.cache_save(profile, wr_url, text)
+        except Exception as e:
+            xbmcgui.Dialog().ok('Echo OnDemand', 'Error loading Wrestling Rewind:\n{}'.format(e))
+            xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
+            return
+
+    items = _wr.parse_feed(wr_url, text)
+
+    if not items:
+        xbmcgui.Dialog().notification(
+            'Echo OnDemand', 'No items found in this section.', time=3000
+        )
+        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
+        return
+
+    xbmcplugin.setPluginCategory(HANDLE, 'Echo OnDemand \u2014 {}'.format(wr_title))
+    # 'videos' is appropriate for wrestling replays — generic video list,
+    # no library metadata panels, no season/episode structure expected.
+    xbmcplugin.setContent(HANDLE, 'videos')
+
+    for item in items:
+        item_type = item.get('type', 'item')
+        title     = item.get('title', 'Unknown').strip()
+        thumbnail = item.get('thumbnail') or ADDON_ICON
+        fanart    = item.get('fanart')    or ADDON_FANART
+        summary   = item.get('summary', '')
+        raw_link  = item.get('link', '')
+
+        li = xbmcgui.ListItem(label=title, offscreen=True)
+        li.setArt({'thumb': thumbnail, 'icon': thumbnail, 'fanart': fanart})
+
+        if title or summary:
+            tag = li.getVideoInfoTag()
+            tag.setMediaType('video')
+            if title:
+                tag.setTitle(title)
+            if summary:
+                tag.setPlot(summary)
+
+        if item_type == 'dir':
+            # Directory — navigate into the sub-feed.
+            # wr_title carries the folder label through for setPluginCategory.
+            target_url = build_url(mode='wr_list', wr_url=raw_link, wr_title=title)
+            xbmcplugin.addDirectoryItem(HANDLE, target_url, li, isFolder=True)
+        else:
+            # Playable item.  Encode the full item dict as base64 JSON so that
+            # play_wr receives all fields (including list-typed link fields from
+            # sublinks) in a single URL-safe parameter.
+            payload = {
+                'title':     title,
+                'link':      raw_link,   # may be str or list
+                'thumbnail': thumbnail,
+                'summary':   summary,
+            }
+            encoded = base64.urlsafe_b64encode(
+                json.dumps(payload).encode('utf-8')
+            ).decode('utf-8')
+
+            li.setProperty('IsPlayable', 'true')
+            target_url = build_url(mode='wr_play', wr_item=encoded)
+            xbmcplugin.addDirectoryItem(HANDLE, target_url, li, isFolder=False)
+
+    xbmcplugin.endOfDirectory(HANDLE)
+
+
+def play_wr(wr_item):
+    """
+    Resolve and play a Wrestling Rewind item.
+
+    Resolution order (handled by wrestling.resolve_best_link):
+      1. Try resolveurl on each candidate URL — debrid wins if available.
+      2. Fall back to any direct video URL.
+      3. Fall back to the first HTTP URL and let Kodi try it.
+
+    Pre-buffer is applied using the same setting and mechanism as IPTV
+    movie/episode playback — consistent behaviour across all content types.
+    """
+    import base64
+
+    try:
+        item    = json.loads(base64.urlsafe_b64decode(wr_item))
+    except Exception as e:
+        log('play_wr: failed to decode item: {}'.format(e), xbmc.LOGWARNING)
+        xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
+        return
+
+    title     = item.get('title', '')
+    raw_link  = item.get('link', '')
+    thumbnail = item.get('thumbnail', '') or ADDON_ICON
+
+    links = _wr.normalise_links(raw_link)
+    if not links:
+        log('play_wr: no usable links in item "{}"'.format(title), xbmc.LOGWARNING)
+        xbmcgui.Dialog().notification('Echo OnDemand', 'No playable link found.', time=3000)
+        xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
+        return
+
+    url, via_debrid = _wr.resolve_best_link(links)
+
+    if not url:
+        xbmcgui.Dialog().notification('Echo OnDemand', 'Could not resolve stream.', time=3000)
+        xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
+        return
+
+    log('play_wr: "{}" -> {} (debrid={})'.format(title, url[:60], via_debrid))
+
+    li = xbmcgui.ListItem(path=url)
+    li.setContentLookup(False)
+    if title:
+        tag = li.getVideoInfoTag()
+        tag.setMediaType('video')
+        tag.setTitle(title)
+    if thumbnail:
+        li.setArt({'thumb': thumbnail, 'icon': thumbnail})
+
+    xbmcplugin.setResolvedUrl(HANDLE, True, li)
+    _apply_buffer(get_buffer_secs())
+
+
+# ---------------------------------------------------------------------------
 # Refresh
 # ---------------------------------------------------------------------------
 
@@ -1080,6 +1265,9 @@ def router(paramstring):
     ext       = params.get('ext', 'mp4')
     vod_name  = params.get('vod_name', '')
     vod_year  = safe_int(params.get('vod_year', 0))
+    wr_url    = params.get('wr_url', '')
+    wr_title  = params.get('wr_title', 'Wrestling Rewind')
+    wr_item   = params.get('wr_item', '')
 
     if mode == 'movie_cats':
         list_movie_categories()
@@ -1097,6 +1285,10 @@ def router(paramstring):
         list_seasons(series_id)
     elif mode == 'episodes':
         list_episodes(series_id, season)
+    elif mode == 'wr_list':
+        list_wr(wr_url, wr_title)
+    elif mode == 'wr_play':
+        play_wr(wr_item)
     elif mode == 'refresh':
         do_refresh()
     else:
