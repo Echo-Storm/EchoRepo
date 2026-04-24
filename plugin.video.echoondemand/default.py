@@ -1,10 +1,25 @@
 #!/usr/bin/env python3
 """
-plugin.video.echoondemand — Echo OnDemand  v2.1.0
+plugin.video.echoondemand — Echo OnDemand  v2.2.0
 Kodi Omega (v21) plugin for browsing and playing VOD content (Movies and Series)
 from an Xtream Codes IPTV service, plus Wrestling Rewind replays via debrid.
 
-Changes in 2.1.0 (Wrestling Rewind integration):
+Changes in 2.2.0 (wrestling parser audit):
+  - _collect_items(): wrapper detection is now generic — any intermediate
+    XML element is tried as a wrapper, not just <xml>.  Previous code silently
+    returned [] for feeds (e.g. PPV) that use a different wrapper element name.
+  - parse_feed(): mutual XML/JSON fallback.  If primary parser returns empty
+    and content looks like the other format, the other parser is tried.
+    Handles feeds where URL extension does not match actual content type.
+  - parse_feed(): LOGINFO diagnostic emitted when both parsers return empty —
+    visible in the Kodi log without debug mode.
+  - resolve_best_link(): all three passes (debrid, direct, fallback) now log
+    at LOGINFO so debrid activity is always visible without debug mode.
+  - resolve_best_link(): _url_from_resolved() handles both plain string and
+    ResolvedURL object returns from newer resolveurl builds.  Also embeds
+    any headers from ResolvedURL in Kodi's native pipe format.
+
+Changes in 2.1.1 (sublink nesting fix):
   - Added Wrestling Rewind section to root menu.
   - resources/lib/wrestling.py: pure data layer — fetch, parse, resolve.
     Handles MicroJen XML and JSON feed formats with 3-pass XML recovery.
@@ -710,7 +725,7 @@ def _tag_episode(li, title, series_name='', season_num=0, ep_num=0,
 # Root view
 # ---------------------------------------------------------------------------
 
-def list_root():
+def list_root(update_listing=False):
     if not credentials_ok():
         return
 
@@ -744,7 +759,7 @@ def list_root():
     li.setProperty('SpecialSort', 'bottom')
     xbmcplugin.addDirectoryItem(HANDLE, build_url(mode='refresh'), li, isFolder=True)
 
-    xbmcplugin.endOfDirectory(HANDLE)
+    xbmcplugin.endOfDirectory(HANDLE, updateListing=update_listing)
 
 
 # ---------------------------------------------------------------------------
@@ -1246,7 +1261,7 @@ def play_wr(wr_item):
 def do_refresh():
     cache_clear_all()
     xbmcgui.Dialog().notification('Echo OnDemand', 'Cache cleared.', time=2000)
-    list_root()
+    list_root(update_listing=True)
 
 
 # ---------------------------------------------------------------------------

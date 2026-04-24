@@ -198,7 +198,7 @@
             </menu>
         </extension>
     </addon>
-    <addon id="plugin.video.echoondemand" name="Echo OnDemand" version="2.1.1" provider-name="Echo-Storm">
+    <addon id="plugin.video.echoondemand" name="Echo OnDemand" version="2.3.1" provider-name="Echo-Storm">
         <requires>
             <import addon="xbmc.python" version="3.0.0" />
             <import addon="xbmc.gui" version="5.17.0" />
