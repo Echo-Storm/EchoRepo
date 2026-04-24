@@ -33,6 +33,14 @@ def Main():
 			start   = utils.time.time()
 			current = utils.settingrpc("weather.currentlocation") or 1  # fallback: loc1 if RPC fails
 
+			# On startup, immediately push cached data to window properties so
+			# the skin background appears at once, before any network activity.
+			# This runs in under a second (file reads only, no network).
+			# The download + second update below will refresh with live data.
+			if startup:
+				utils.log('Startup: pre-loading properties from cache ...', 3)
+				weather.Main(str(current), mode='update')
+
 			# Download
 			for locid in range(1, config.addon.maxlocs):
 				if utils.monitor.abortRequested():

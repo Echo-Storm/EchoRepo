@@ -4,9 +4,4 @@
   <setting id="password"     type="text"   option="hidden" label="Password" default=""/>
   <setting id="buffer_secs"  type="slider" label="Pre-buffer seconds (0 = disabled)" default="5" range="0,1,10" option="int"/>
   <setting id="tmdb_api_key" type="text"   label="TMDB API Key (optional — enables movie fanart)" default=""/>
-
-  <setting id="wr_root_url"  type="text"   label="Wrestling Rewind — Root XML URL"
-           default="https://mylostsoulspace.co.uk/WrestlingRewind/xmls/wrestlingrewind-main.xml"/>
-  <setting id="wr_cache_ttl" type="slider" label="Wrestling Rewind — Cache TTL (minutes)"
-           default="30" range="5,5,120" option="int"/>
 </settings>

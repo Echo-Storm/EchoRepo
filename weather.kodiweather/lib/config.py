@@ -1,4 +1,5 @@
 import os
+import random
 import xbmc
 import xbmcvfs
 import xbmcaddon
@@ -425,6 +426,47 @@ def get_fanart_folder(code):
 	"""Return the fanart folder for a given Yahoo weather code.
 	   Redirects clone codes to their master folder."""
 	return map_fanart.get(code, code)
+
+# Fanart background - stable image selection
+# Keyed by str(locid). Holds {'code': str, 'path': str} per location.
+# Persists for the lifetime of the Kodi session so the same image is shown
+# until the weather code or day/night state actually changes.
+_fanartbg_state = {}
+
+def get_fanartbg(code, locid):
+	"""Return a stable full image path for the given fanart code and location.
+
+	A new image is picked at random only when the code changes (i.e. when the
+	weather condition or day/night state changes).  Between those events the
+	same image is returned every time, so the home-screen background does not
+	cycle or flicker.
+
+	Returns a special:// path to a specific file, or '' if none can be found.
+	"""
+	key      = str(locid)
+	code_str = str(code)
+	entry    = _fanartbg_state.get(key, {})
+
+	# Code unchanged and we already have a valid path — keep it.
+	if entry.get('code') == code_str and entry.get('path'):
+		return entry['path']
+
+	# Code changed (or first run) — pick one image and lock it in.
+	# Use special:// throughout — avoids os.path mixed separators on Windows.
+	try:
+		folder_uri = f'special://home/addons/resource.images.weatherfanart.echo/{code_str}/'
+		_, files   = xbmcvfs.listdir(folder_uri)
+		imgs       = [f for f in files if f.lower().endswith(('.jpg', '.jpeg', '.png', '.webp'))]
+
+		if imgs:
+			chosen = random.choice(imgs)
+			path   = f'{folder_uri}{chosen}'
+			_fanartbg_state[key] = {'code': code_str, 'path': path}
+			return path
+	except Exception:
+		pass
+
+	return ''
 
 # Graph (Resolution)
 map_height = {

@@ -1,99 +1,110 @@
 #!/usr/bin/env python3
 """
-plugin.video.echoondemand — Echo OnDemand  v2.2.0
+plugin.video.echoondemand — Echo OnDemand  v2.5.0
 Kodi Omega (v21) plugin for browsing and playing VOD content (Movies and Series)
-from an Xtream Codes IPTV service, plus Wrestling Rewind replays via debrid.
+from an Xtream Codes IPTV service, plus Wrestling content via debrid.
 
-Changes in 2.2.0 (wrestling parser audit):
-  - _collect_items(): wrapper detection is now generic — any intermediate
-    XML element is tried as a wrapper, not just <xml>.  Previous code silently
-    returned [] for feeds (e.g. PPV) that use a different wrapper element name.
-  - parse_feed(): mutual XML/JSON fallback.  If primary parser returns empty
-    and content looks like the other format, the other parser is tried.
-    Handles feeds where URL extension does not match actual content type.
-  - parse_feed(): LOGINFO diagnostic emitted when both parsers return empty —
-    visible in the Kodi log without debug mode.
-  - resolve_best_link(): all three passes (debrid, direct, fallback) now log
-    at LOGINFO so debrid activity is always visible without debug mode.
-  - resolve_best_link(): _url_from_resolved() handles both plain string and
-    ResolvedURL object returns from newer resolveurl builds.  Also embeds
-    any headers from ResolvedURL in Kodi's native pipe format.
+Changes in 2.5.0 (audit + bugfix sweep):
+  - BUG FIX: list_root() no longer gates on credentials_ok(). Wrestling is
+    accessible even when IPTV credentials are not configured. Each IPTV
+    section (list_movie_categories, list_series_categories) already does its
+    own credentials check — the root-level check was redundant and blocked
+    unrelated content.
+  - BUG FIX: All list_* exception return paths now call
+    endOfDirectory(HANDLE, succeeded=False) before returning. Previously,
+    every network/parse error left Kodi hanging in an infinite loading state
+    waiting for a directory response that never came. Affected:
+    list_movie_categories, list_movies, list_series_categories, list_series,
+    list_seasons, list_episodes.
+  - BUG FIX: credentials_ok() failure paths in list_movie_categories and
+    list_series_categories now call endOfDirectory(succeeded=False) for the
+    same reason.
+  - BUG FIX: list_wr() now skips dir items with empty link fields rather than
+    building a wr_url='' navigation URL that silently produces zero items.
+  - CLEANUP: import base64 moved to module-level. Redundant inline
+    `import base64` / `import json` removed from list_wr() and play_wr().
 
-Changes in 2.1.1 (sublink nesting fix):
-  - Added Wrestling Rewind section to root menu.
-  - resources/lib/wrestling.py: pure data layer — fetch, parse, resolve.
-    Handles MicroJen XML and JSON feed formats with 3-pass XML recovery.
-  - list_wr(): navigates WR XML/JSON directory feeds, same caching pattern
-    as the rest of the addon.
-  - play_wr(): debrid-first resolution via resolveurl, silent direct-link
-    fallback.  No link chooser dialog — seamless like the rest of the addon.
-  - Pre-buffer applied to WR playback using the same setting as IPTV.
-  - addon.xml: script.module.resolveurl added as required dependency.
-  - settings.xml: wr_root_url (overridable feed URL) + wr_cache_ttl.
-  - Routing: wr_list, wr_play modes added.
+Changes in 2.4.x (Wrestling UI consistency):
+  - Wrestling root entry uses ADDON_ICON like Movies and Series (no custom icon).
+  - list_wr: setContent('files') suppresses info panel; no VideoInfoTag calls.
+  - play_wr: no VideoInfoTag, no art on resolved ListItem.
+  - do_refresh: calls list_root(update_listing=True) so the Refresh URL is
+    replaced in-place in Kodi's navigation stack, preventing the cache-clear
+    notification from firing again on back-navigation.
+  - Wrestling.png genre icon added (unused by current code, available for future).
 
-Changes in 2.0.0 (final polish pass):
-  - list_root: setContent changed from 'videos' to 'addons'. 'videos' triggered
-    the skin's episode info panel (control 8001) which rendered the addon icon at
-    the top and left an empty text box below it. 'addons' uses the simple poster
-    panel instead — clean icon display, no dead space.
-  - Removed unused URLError import (api_get docstring is the documentation; all
-    callers use except Exception which already catches it).
-  - Stale 'icons restored' comment removed from list_series_categories.
-  - Companion skin edits (MyVideoNav.xml, View_50_List.xml):
-      * Plot synopsis overlay restricted to movies + tvshows — removed from
-        episodes where the skin already provides a full right-side info panel.
-      * Genre category right-panel suppressed in VideoList and SlimVideoList via
-        Container.Content(files) + Container.PluginName condition.
-      * InfoPanel overlay (views 52-59) also suppressed for category views.
-      * Duplicate IsCollection label removed from VideoList movies itemlayout.
-      * Ghost control 4421 reference removed from MyVideoNav.xml.
+Changes in 2.3.x (wrestling parser audit):
+  - _strip_preamble: regex now handles both <layouttype> and <layoutype> variants
+    (PPV feeds use single-t close tag).
+  - parse_xml: pass 4 added — per-item lenient regex extraction for feeds where
+    overall document structure is broken but individual items are valid XML.
+  - _strip_label_suffix: now handles any URI scheme (magnet:, http:, etc.) not
+    just http prefix. Previously magnet: labels were not stripped.
+  - normalise_links: now includes magnet: URIs for Real-Debrid torrent resolution.
+    Previously magnet links were silently dropped.
+  - _collect_items: wrapper detection is now generic. Previous code only
+    recognised <xml> as an intermediate wrapper, silently returning [] for PPV
+    feeds that use a different wrapper element name.
+  - parse_feed: mutual XML/JSON fallback when primary parser returns empty.
+  - All resolution and parse outcomes logged at LOGINFO (visible without debug mode).
+  - resolve_best_link: _url_from_resolved() handles both plain string and
+    ResolvedURL object; embeds headers in Kodi's native pipe format.
 
-Changes in 1.3.1 (audit + cosmetic fixes):
-  - credentials_ok() now guarded in list_movie_categories/list_series_categories
-    so deep links (favourites, skin widgets) show a proper "configure credentials"
-    dialog instead of a raw API error.
-  - cat_name threaded through URL params; list_movies/list_series now call
-    setPluginCategory with the actual genre name for correct breadcrumb display.
-  - list_series: added empty-list guard (notification + endOfDirectory succeeded=False)
-    to match list_movies behaviour.
-  - list_episodes: added empty-episode-list guard for the same reason.
-  - list_seasons: setContent changed from 'tvshows' to 'seasons' (correct Kodi type).
-  - Refresh item: isFolder changed False→True (was misusing the playable-item contract).
-  - play_movie: TMDB fetch moved to after _apply_buffer so it truly runs while the
-    stream is already playing, not before the buffer cycle starts.
-  - _apply_buffer docstring: removed stale "show notification toast" step.
-  - Category list items use Content('files') to drive right-panel suppression at
-    the skin level rather than manipulating art keys.
+Changes in 2.2.x (Wrestling Rewind integration, sublink nesting fix):
+  - Wrestling section added to root menu.
+  - resources/lib/wrestling.py: pure data layer — HTTP fetch, MicroJen XML/JSON
+    parse, cache, debrid resolution via resolveurl.
+  - Debrid is always attempted first; direct-link fallback is silent.
+  - _parse_element: two-pass sublink extraction handles both direct-child and
+    nested-inside-<link> sublink patterns (WR's own parser uses .//sublink).
+  - Pre-buffer applies to Wrestling playback using same setting as IPTV.
+  - script.module.resolveurl added as hard dependency in addon.xml.
+
+Changes in 2.0.0 (final IPTV polish pass):
+  - list_root setContent changed 'videos' → 'addons' (suppresses episode info panel).
+  - Companion skin edits (MyVideoNav.xml, View_50_List.xml): info panel suppressed
+    for category views; duplicate label removed; ghost control reference removed.
+
+Changes in 1.3.x (audit + cosmetic):
+  - credentials_ok() guard added to category views for deep-link safety.
+  - cat_name threaded through URL params for correct breadcrumb display.
+  - list_series, list_episodes: empty-list guards added.
+  - list_seasons: setContent 'tvshows' → 'seasons'.
+  - Refresh entry isFolder corrected False → True.
+  - play_movie: TMDB fetch moved to after _apply_buffer.
 
 Routing:
   (root)                                    -> list_root()
-  mode=movie_cats                                   -> list_movie_categories()
-  mode=movies       cat_id=X  cat_name=Y            -> list_movies(cat_id, cat_name)
-  mode=series_cats                                  -> list_series_categories()
-  mode=series       cat_id=X  cat_name=Y            -> list_series(cat_id, cat_name)
-  mode=seasons      series_id=X                     -> list_seasons(series_id)
-  mode=episodes     series_id=X  season=N           -> list_episodes(series_id, season_num)
-  mode=play_movie   vod_id=X     ext=Y              -> play_movie(vod_id, ext)
-  mode=wr_list      wr_url=X    [wr_title=Y]        -> list_wr(wr_url, wr_title)
-  mode=wr_play      wr_item=X                       -> play_wr(wr_item)
-  mode=refresh                                      -> clear all cache, go to root
+  mode=movie_cats                           -> list_movie_categories()
+  mode=movies       cat_id=X  cat_name=Y   -> list_movies(cat_id, cat_name)
+  mode=series_cats                          -> list_series_categories()
+  mode=series       cat_id=X  cat_name=Y   -> list_series(cat_id, cat_name)
+  mode=seasons      series_id=X            -> list_seasons(series_id)
+  mode=episodes     series_id=X  season=N  -> list_episodes(series_id, season_num)
+  mode=play_movie   vod_id=X  ext=Y        -> play_movie(vod_id, ext)
+  mode=play_episode ep_id=X   ext=Y        -> play_episode(ep_id, ext)
+  mode=wr_list      wr_url=X [wr_title=Y]  -> list_wr(wr_url, wr_title)
+  mode=wr_play      wr_item=X              -> play_wr(wr_item)
+  mode=refresh                             -> clear all cache, reload root
 
-Cache strategy (all files live in addon profile dir):
-  movie_cats.json          TTL 1 hour   -- list of movie genre categories
-  series_cats.json         TTL 1 hour   -- list of series genre categories
+Cache strategy (all files in addon profile directory):
+  movie_cats.json          TTL 1 hour   -- movie genre category list
+  series_cats.json         TTL 1 hour   -- series genre category list
   movies_{cat_id}.json     TTL 30 min   -- movie list for one category
   series_{cat_id}.json     TTL 30 min   -- series list for one category
   seriesinfo_{id}.json     TTL 1 hour   -- full season/episode data for one series
+  tmdb_fanart.json         permanent    -- TMDB backdrop URL cache (key = name|year)
+  wr_{url_hash}.json       TTL 30 min   -- Wrestling feed cache (managed by wrestling.py)
 
 Stream URL formats (standard Xtream Codes):
-  Movie:   {server}/movie/{user}/{pass}/{vod_id}.{ext}
-  Episode: {server}/series/{user}/{pass}/{episode_id}.{ext}
+  Movie:   {SERVER}/movie/{user}/{pass}/{vod_id}.{ext}
+  Episode: {SERVER}/series/{user}/{pass}/{episode_id}.{ext}
 
 Assumptions:
   - Service is Xtream Codes-compatible (player_api.php supported).
   - Extension (.mkv, .mp4, etc.) comes from the API field 'container_extension'.
-  - All artwork URLs come from the API. Nothing is generated locally.
+  - All IPTV artwork URLs come from the API. Nothing is generated locally.
+  - script.module.resolveurl is installed and configured with a debrid account.
   - Kodi Omega (v21) / Python 3.
 """
 
@@ -102,6 +113,7 @@ import json
 import os
 import time
 import glob
+import base64
 from urllib.parse import parse_qsl, urlencode
 from urllib.request import urlopen, Request
 
@@ -726,9 +738,6 @@ def _tag_episode(li, title, series_name='', season_num=0, ep_num=0,
 # ---------------------------------------------------------------------------
 
 def list_root(update_listing=False):
-    if not credentials_ok():
-        return
-
     xbmcplugin.setPluginCategory(HANDLE, 'Echo OnDemand')
     # 'addons' suppresses the episode info panel (control 8001 in View_50_List.xml)
     # which shows for 'videos' content and leaves an empty text box below the icon.
@@ -746,10 +755,10 @@ def list_root(update_listing=False):
     wr_root = ADDON.getSetting('wr_root_url').strip()
     if not wr_root:
         wr_root = 'https://mylostsoulspace.co.uk/WrestlingRewind/xmls/wrestlingrewind-main.xml'
-    li = xbmcgui.ListItem(label='Wrestling Rewind', offscreen=True)
+    li = xbmcgui.ListItem(label='Wrestling', offscreen=True)
     li.setArt({'icon': ADDON_ICON, 'thumb': ADDON_ICON, 'fanart': ADDON_FANART})
     xbmcplugin.addDirectoryItem(
-        HANDLE, build_url(mode='wr_list', wr_url=wr_root, wr_title='Wrestling Rewind'),
+        HANDLE, build_url(mode='wr_list', wr_url=wr_root, wr_title='Wrestling'),
         li, isFolder=True
     )
 
@@ -768,11 +777,13 @@ def list_root(update_listing=False):
 
 def list_movie_categories():
     if not credentials_ok():
+        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
         return
     try:
         cats = get_movie_categories()
     except Exception as e:
         xbmcgui.Dialog().ok('Echo OnDemand', 'Error loading movie categories:\n{}'.format(e))
+        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
         return
 
     xbmcplugin.setPluginCategory(HANDLE, 'Echo OnDemand \u2014 Movies')
@@ -804,6 +815,7 @@ def list_movies(cat_id, cat_name=''):
         movies = get_movies_for_category(cat_id)
     except Exception as e:
         xbmcgui.Dialog().ok('Echo OnDemand', 'Error loading movies:\n{}'.format(e))
+        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
         return
 
     if not movies:
@@ -893,11 +905,13 @@ def play_episode(ep_id, ext):
 
 def list_series_categories():
     if not credentials_ok():
+        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
         return
     try:
         cats = get_series_categories()
     except Exception as e:
         xbmcgui.Dialog().ok('Echo OnDemand', 'Error loading series categories:\n{}'.format(e))
+        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
         return
 
     xbmcplugin.setPluginCategory(HANDLE, 'Echo OnDemand \u2014 Series')
@@ -925,6 +939,7 @@ def list_series(cat_id, cat_name=''):
         series_list = get_series_for_category(cat_id)
     except Exception as e:
         xbmcgui.Dialog().ok('Echo OnDemand', 'Error loading series:\n{}'.format(e))
+        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
         return
 
     if not series_list:
@@ -980,6 +995,7 @@ def list_seasons(series_id):
         info = get_series_info(series_id)
     except Exception as e:
         xbmcgui.Dialog().ok('Echo OnDemand', 'Error loading series info:\n{}'.format(e))
+        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
         return
 
     series_meta = info.get('info', {})
@@ -1035,6 +1051,7 @@ def list_episodes(series_id, season_num):
         info = get_series_info(series_id)
     except Exception as e:
         xbmcgui.Dialog().ok('Echo OnDemand', 'Error loading episodes:\n{}'.format(e))
+        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
         return
 
     series_meta  = info.get('info', {})
@@ -1108,36 +1125,29 @@ def list_episodes(series_id, season_num):
 
 
 def _wr_ttl():
-    """Read WR cache TTL from settings. Returns seconds. Default 30 minutes."""
-    try:
-        return max(60, int(float(ADDON.getSetting('wr_cache_ttl') or '30')) * 60)
-    except (ValueError, TypeError):
-        return 1800
+    """WR feed cache TTL — fixed at 30 minutes."""
+    return 1800
 
 
-def list_wr(wr_url, wr_title='Wrestling Rewind'):
+def list_wr(wr_url, wr_title='Wrestling'):
     """
-    Fetch and display one level of a Wrestling Rewind MicroJen feed.
+    Fetch and display one level of a Wrestling MicroJen feed.
 
     Folders (type=dir) route back to list_wr with the sub-feed URL.
     Playable items (type=item) route to play_wr with the item encoded as
-    base64 JSON — same pattern used internally by Wrestling Rewind itself,
-    kept here because it handles lists of sublinks cleanly in a single URL
-    parameter without per-field encoding gymnastics.
+    base64 JSON — handles list-typed link fields (sublinks) cleanly in a
+    single URL parameter.
     """
-    import base64
-
     profile = _profile_dir()
     ttl     = _wr_ttl()
 
-    # Fetch (or serve from cache)
     text = _wr.cache_load(profile, wr_url, ttl)
     if text is None:
         try:
             text = _wr.fetch_feed(wr_url)
             _wr.cache_save(profile, wr_url, text)
         except Exception as e:
-            xbmcgui.Dialog().ok('Echo OnDemand', 'Error loading Wrestling Rewind:\n{}'.format(e))
+            xbmcgui.Dialog().ok('Echo OnDemand', 'Error loading Wrestling feed:\n{}'.format(e))
             xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
             return
 
@@ -1151,48 +1161,33 @@ def list_wr(wr_url, wr_title='Wrestling Rewind'):
         return
 
     xbmcplugin.setPluginCategory(HANDLE, 'Echo OnDemand \u2014 {}'.format(wr_title))
-    # 'videos' is appropriate for wrestling replays — generic video list,
-    # no library metadata panels, no season/episode structure expected.
-    xbmcplugin.setContent(HANDLE, 'videos')
+    xbmcplugin.setContent(HANDLE, 'files')
 
     for item in items:
         item_type = item.get('type', 'item')
         title     = item.get('title', 'Unknown').strip()
-        thumbnail = item.get('thumbnail') or ADDON_ICON
-        fanart    = item.get('fanart')    or ADDON_FANART
-        summary   = item.get('summary', '')
         raw_link  = item.get('link', '')
 
-        li = xbmcgui.ListItem(label=title, offscreen=True)
-        li.setArt({'thumb': thumbnail, 'icon': thumbnail, 'fanart': fanart})
+        # Skip directory entries with no link — they would navigate to a broken URL.
+        if item_type == 'dir' and not raw_link:
+            log('list_wr: skipping dir item "{}" with empty link'.format(title),
+                xbmc.LOGWARNING)
+            continue
 
-        if title or summary:
-            tag = li.getVideoInfoTag()
-            tag.setMediaType('video')
-            if title:
-                tag.setTitle(title)
-            if summary:
-                tag.setPlot(summary)
+        li = xbmcgui.ListItem(label=title, offscreen=True)
+        li.setArt({'thumb': ADDON_ICON, 'icon': ADDON_ICON, 'fanart': ADDON_FANART})
 
         if item_type == 'dir':
-            # Directory — navigate into the sub-feed.
-            # wr_title carries the folder label through for setPluginCategory.
             target_url = build_url(mode='wr_list', wr_url=raw_link, wr_title=title)
             xbmcplugin.addDirectoryItem(HANDLE, target_url, li, isFolder=True)
         else:
-            # Playable item.  Encode the full item dict as base64 JSON so that
-            # play_wr receives all fields (including list-typed link fields from
-            # sublinks) in a single URL-safe parameter.
             payload = {
-                'title':     title,
-                'link':      raw_link,   # may be str or list
-                'thumbnail': thumbnail,
-                'summary':   summary,
+                'title': title,
+                'link':  raw_link,
             }
             encoded = base64.urlsafe_b64encode(
                 json.dumps(payload).encode('utf-8')
             ).decode('utf-8')
-
             li.setProperty('IsPlayable', 'true')
             target_url = build_url(mode='wr_play', wr_item=encoded)
             xbmcplugin.addDirectoryItem(HANDLE, target_url, li, isFolder=False)
@@ -1202,28 +1197,24 @@ def list_wr(wr_url, wr_title='Wrestling Rewind'):
 
 def play_wr(wr_item):
     """
-    Resolve and play a Wrestling Rewind item.
+    Resolve and play a Wrestling item.
 
     Resolution order (handled by wrestling.resolve_best_link):
-      1. Try resolveurl on each candidate URL — debrid wins if available.
+      1. Try resolveurl on each candidate — debrid wins if available.
       2. Fall back to any direct video URL.
       3. Fall back to the first HTTP URL and let Kodi try it.
 
-    Pre-buffer is applied using the same setting and mechanism as IPTV
-    movie/episode playback — consistent behaviour across all content types.
+    Pre-buffer applied using same setting and mechanism as IPTV playback.
     """
-    import base64
-
     try:
-        item    = json.loads(base64.urlsafe_b64decode(wr_item))
+        item = json.loads(base64.urlsafe_b64decode(wr_item))
     except Exception as e:
         log('play_wr: failed to decode item: {}'.format(e), xbmc.LOGWARNING)
         xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
         return
 
-    title     = item.get('title', '')
-    raw_link  = item.get('link', '')
-    thumbnail = item.get('thumbnail', '') or ADDON_ICON
+    title    = item.get('title', '')
+    raw_link = item.get('link', '')
 
     links = _wr.normalise_links(raw_link)
     if not links:
@@ -1243,12 +1234,6 @@ def play_wr(wr_item):
 
     li = xbmcgui.ListItem(path=url)
     li.setContentLookup(False)
-    if title:
-        tag = li.getVideoInfoTag()
-        tag.setMediaType('video')
-        tag.setTitle(title)
-    if thumbnail:
-        li.setArt({'thumb': thumbnail, 'icon': thumbnail})
 
     xbmcplugin.setResolvedUrl(HANDLE, True, li)
     _apply_buffer(get_buffer_secs())
@@ -1281,7 +1266,7 @@ def router(paramstring):
     vod_name  = params.get('vod_name', '')
     vod_year  = safe_int(params.get('vod_year', 0))
     wr_url    = params.get('wr_url', '')
-    wr_title  = params.get('wr_title', 'Wrestling Rewind')
+    wr_title  = params.get('wr_title', 'Wrestling')
     wr_item   = params.get('wr_item', '')
 
     if mode == 'movie_cats':
