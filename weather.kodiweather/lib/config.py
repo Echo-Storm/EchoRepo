@@ -454,7 +454,7 @@ def get_fanartbg(code, locid):
 	# Code changed (or first run) — pick one image and lock it in.
 	# Use special:// throughout — avoids os.path mixed separators on Windows.
 	try:
-		folder_uri = f'special://home/addons/resource.images.weatherfanart.echo/{code_str}/'
+		folder_uri = f'special://home/addons/resource.images.weatherfanart.echo/resources/{code_str}/'
 		_, files   = xbmcvfs.listdir(folder_uri)
 		imgs       = [f for f in files if f.lower().endswith(('.jpg', '.jpeg', '.png', '.webp'))]
 

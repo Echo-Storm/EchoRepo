@@ -2,6 +2,12 @@
 
 All notable changes to weather.kodiweather.
 
+## [2.4.8] - 2026-05-03
+
+### Fixed — Weather fanart background black screen
+
+- **lib/config.py**: `get_fanartbg()` was building `special://home/addons/resource.images.weatherfanart.echo/{code}/` (addon root). Images live under `resources/{code}/`. Added `resources/` to the path. Affected every condition code — `current.fanartbg` returned `''` and the background was always black.
+
 ## [2.4.7] - 2026-04-24
 
 ### Fixed — Home screen background stability
