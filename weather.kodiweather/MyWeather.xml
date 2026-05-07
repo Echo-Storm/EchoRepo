@@ -161,7 +161,11 @@
 							<description>current condition label</description>
 							<top>215</top>
 							<width>1316</width>
-							<height>40</height>
+							<!-- Height raised from 40 to 80: font30 descenders (y, g, p) were
+							     clipping at 40px, causing conditions like "Mostly Sunny" to render
+							     truncated. 80px gives two clean lines and fully accommodates all
+							     descenders. wrapmultiline is now meaningful at this height. -->
+							<height>80</height>
 							<label>$INFO[Window.Property(Current.Condition)]</label>
 							<wrapmultiline>true</wrapmultiline>
 							<font>font30</font>
@@ -171,7 +175,8 @@
 						<control type="label">
 							<description>update label</description>
 							<left>2</left>
-							<top>255</top>
+							<!-- top shifted from 255 to 295 to clear the taller condition label above -->
+							<top>295</top>
 							<width>690</width>
 							<height>40</height>
 							<font>font13</font>
@@ -887,7 +892,9 @@
 								<item>
 									<label>$LOCALIZE[31909]</label>
 									<icon />
-									<visible>String.IsEmpty(Window.Property(36Hour.IsFetched))</visible>
+									<!-- Loading placeholder — show while Weekend data is not yet fetched.
+									     Was incorrectly checking 36Hour.IsFetched (copy-paste error). -->
+									<visible>String.IsEmpty(Window.Property(Weekend.IsFetched))</visible>
 								</item>
 								<item>
 									<label>$INFO[Window.Property(Weekend.1.LongDay)] $INFO[Window.Property(Weekend.1.LongDate)]</label>
@@ -1075,7 +1082,9 @@
 								<item>
 									<label>$LOCALIZE[31909]</label>
 									<icon />
-									<visible>String.IsEmpty(Window.Property(Daily.IsFetched))</visible>
+									<!-- Loading placeholder — show while Hourly data is not yet fetched.
+									     Was incorrectly checking Daily.IsFetched (copy-paste error). -->
+									<visible>String.IsEmpty(Window.Property(Hourly.IsFetched))</visible>
 								</item>
 								<item>
 									<label>$INFO[Window.Property(Hourly.1.LongDay)] $INFO[Window.Property(Hourly.1.Time)]</label>
@@ -1553,16 +1562,6 @@
 							<aspectratio>scale</aspectratio>
 							<colordiffuse>70FFFFFF</colordiffuse>
 						</control>
-						<control type="label">
-							<top>695</top>
-							<width>1401</width>
-							<height>70</height>
-							<align>right</align>
-							<textcolor>black</textcolor>
-							<shadowcolor>white</shadowcolor>
-							<label>$INFO[ListItem.Label]</label>
-							<textoffsetx>15</textoffsetx>
-						</control>
 						<control type="image">
 							<top>750</top>
 							<width>1401</width>
@@ -1590,16 +1589,6 @@
 							<texture>$INFO[Window.Property(Map.3.Layer)]</texture>
 							<aspectratio>scale</aspectratio>
 							<colordiffuse>70FFFFFF</colordiffuse>
-						</control>
-						<control type="label">
-							<top>695</top>
-							<width>1401</width>
-							<height>70</height>
-							<align>right</align>
-							<textcolor>black</textcolor>
-							<shadowcolor>white</shadowcolor>
-							<label>$INFO[ListItem.Label]</label>
-							<textoffsetx>15</textoffsetx>
 						</control>
 						<control type="image">
 							<top>750</top>
@@ -1629,16 +1618,6 @@
 							<aspectratio>scale</aspectratio>
 							<colordiffuse>70FFFFFF</colordiffuse>
 						</control>
-						<control type="label">
-							<top>695</top>
-							<width>1401</width>
-							<height>70</height>
-							<align>right</align>
-							<textcolor>black</textcolor>
-							<shadowcolor>white</shadowcolor>
-							<label>$INFO[ListItem.Label]</label>
-							<textoffsetx>15</textoffsetx>
-						</control>
 						<control type="image">
 							<top>750</top>
 							<width>1401</width>
@@ -1666,16 +1645,6 @@
 							<texture>$INFO[Window.Property(Map.5.Layer)]</texture>
 							<aspectratio>scale</aspectratio>
 							<colordiffuse>70FFFFFF</colordiffuse>
-						</control>
-						<control type="label">
-							<top>695</top>
-							<width>1401</width>
-							<height>70</height>
-							<align>right</align>
-							<textcolor>black</textcolor>
-							<shadowcolor>white</shadowcolor>
-							<label>$INFO[ListItem.Label]</label>
-							<textoffsetx>15</textoffsetx>
 						</control>
 						<control type="image">
 							<top>750</top>

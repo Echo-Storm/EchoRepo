@@ -94,13 +94,26 @@ def getdata(type, loc, map=None):
 		utils.log(f'getdata: unknown data type {type!r}, skipping', 2)
 		return
 
-	# Weather
+	# Weather — atomic write so a concurrent reader (skin or another service
+	# tick) can't see a partially-written JSON. Without this, getfile() catches
+	# the json.load error, setdata() returns early, current.fanartcode never
+	# gets set, and the skin shows a black weather background until the next
+	# successful tick.
 	file = f'{config.addon_cache}/{loc}/{type}.json'
 	data = geturl(url)
 
 	if data:
-		with open(Path(file), 'wb') as f:
-			f.write(data)
+		tmp = f'{file}.tmp'
+		try:
+			with open(Path(tmp), 'wb') as f:
+				f.write(data)
+			os.replace(tmp, file)
+		except Exception as e:
+			utils.log(f'getdata: failed to write {type}.json: {e}', 2)
+			try:
+				Path(tmp).unlink()
+			except Exception:
+				pass
 
 # Get NWS Alerts
 def getnoaalerts(locid, lat, lon):
@@ -111,8 +124,18 @@ def getnoaalerts(locid, lat, lon):
 	data = geturl(url)
 
 	if data:
-		with open(Path(file), 'wb') as f:
-			f.write(data)
+		# Atomic write — same reasoning as getdata above.
+		tmp = f'{file}.tmp'
+		try:
+			with open(Path(tmp), 'wb') as f:
+				f.write(data)
+			os.replace(tmp, file)
+		except Exception as e:
+			utils.log(f'getnoaalerts: failed to write noaalerts.json: {e}', 2)
+			try:
+				Path(tmp).unlink()
+			except Exception:
+				pass
 
 
 def getmap(map, head=False):

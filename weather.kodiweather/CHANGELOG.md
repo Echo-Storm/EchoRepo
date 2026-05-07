@@ -2,6 +2,35 @@
 
 All notable changes to weather.kodiweather.
 
+## [2.4.9] - 2026-05-07
+
+### Fixed — Black weather background race conditions
+
+Long-standing intermittent issue where `current.fanartbg` would briefly go empty and the home-screen weather background would render as a black tile. Three independent failure paths fed into the same end state and none of them recovered:
+
+- **lib/api.py**: `getdata()` and `getnoaalerts()` wrote JSON files in place. A concurrent reader landing inside the write window saw a truncated file, `json.load` raised, `getfile()` returned None, `setdata()` returned early at line 138 *before setting `current.fanartcode`*, and `setother()` then wrote `current.fanartbg=''`. Now writes to `<file>.tmp` and uses `os.replace()` to atomically swap, so readers always see either the old complete file or the new complete file. Atomic on both POSIX and Windows.
+- **lib/weather.py**: `setother()` actively wiped a known-good `current.fanartbg` with `''` whenever `current.fanartcode` was briefly missing — which is exactly what happens during the partial-write race above and during Open-Meteo `weather_code: null` hiccups. Now always calls `get_fanartbg()` and lets the function's own fallback chain decide what to write.
+- **lib/config.py**: `get_fanartbg()` returned `''` whenever the per-code folder lookup failed, even though the resource pack ships `Fallback_00.jpg` through `Fallback_03.jpg` in the `resources/` root specifically as last-resort backgrounds. Rewrote with a three-level fallback chain: real per-code image (cached, stable) → previously-cached real image when `code` is empty (preserves the last good background through brief data outages) → random `Fallback_*.jpg` (cached separately with a `fallback` flag so the next service tick re-tries the real folder and recovers automatically) → `''` only if the resource pack itself is unreadable. Added debug-level logging at each step so future failures are traceable in the Kodi log.
+
+### Fixed — Audit pass
+
+- **lib/config.py**: `maxdays` was set once at module import and never refreshed. Changing the `fcdays` setting in the addon UI had no effect on the API URL (`api.py:85`), the TimeOfDay loop (`utils.py:570`), or the four `setmulti` calls in `weather.py` until Kodi restarted the Python process. Refresh now happens inside `addon()` so `config.init()` (called from `monitor.onSettingsChanged`) picks up the new value on the next service tick. Module-level fallback retained for the brief import → first-`init()` window.
+- **lib/utils.py**: `notification()` computed `(setting('alert_duration', 'int') - 2) * 1000`. The 2.4.6 guard that makes `setting(..., 'int')` return `0` on a corrupt value meant a corrupted settings.xml could pass `-2000` to `xbmcgui.Dialog().notification`. Floored at `max(3, ...)` seconds before the multiply, matching the same floor that 2.4.6 added in `weather.py:notification`.
+- **lib/utils.py**: `getprop()` had no fallthrough for `len(map[1]) > 3`. Any future 4-element key path would leave `content` unbound and raise `UnboundLocalError` two lines later. Added an explicit `raise TypeError` with the offending path so `setmap`'s existing `TypeError` handler logs cleanly instead of crashing the update.
+- **lib/conv.py**: `direction()` returned `None` for non-integer inputs because all 16 sectors used integer-only ranges (e.g. `>= 12 and <= 33`); a value of `11.5` matched no branch. Added an `int(round(float(deg)))` coercion at entry with a guard for non-numeric input.
+- **lib/conv.py**: `moonphase()` and `moonphaseimage()` had the same float-input gap from their discrete-equality boundary checks (`358..2`, `88..92`, etc.). Same `int(round(float(deg)))` coercion at entry.
+- **lib/conv.py**: `season()` used closed intervals on both ends, so day 172 (summer solstice) returned spring, day 264 (autumn equinox) returned summer, and day 355 (winter solstice) returned autumn. Switched to half-open intervals so each solstice/equinox starts the new season.
+- **MyWeather.xml**: bundled copy was older than the deployed version. Replaced with the corrected deployed XML, which contains: condition label `<height>` 40 → 80 (font30 descender clipping on conditions like "Mostly Sunny"), following label `<top>` 255 → 295 to clear the taller condition label, `36Hour.IsFetched` → `Weekend.IsFetched` copy-paste fix, `Daily.IsFetched` → `Hourly.IsFetched` copy-paste fix, and removal of four duplicated `$INFO[ListItem.Label]` overlay controls.
+
+### Notes — observed but not changed in this pass
+
+- The skin reads `36Hour.IsFetched`, `Weekend.IsFetched`, `36Hour.X.*`, and `Weekend.X.*`, none of which the addon writes. The addon's `addprop(f'{prop}.isfetched', 'true')` covers `current`, `weather`, `hourly`, `daily`, `timeofday`, `map` only. The `36Hour` / `Weekend` bridge must live in one of the skin's other Includes files (likely `Includes_Home.xml`, `Includes_LiveBG.xml`, or `Includes_Backgrounds.xml`); confirmed not in `Includes.xml` or in `MyWeather.xml`.
+- `addon.maxlocs` is named like a count but used as the exclusive upper bound of `range(1, maxlocs)`. Code is consistent and works correctly; left alone to avoid touching every call site.
+- Several files had a top-level `import os` that was never used (`lib/service.py`, `lib/utils.py`, `lib/config.py`). `lib/api.py`'s `import os` is now actually used by the atomic-write path. The other three left alone — cosmetic.
+- `lib/utils.py:362` uses `round(conv.speed(...), True)` then `int(...)`, which double-rounds. Cosmetic; left alone.
+
+---
+
 ## [2.4.8] - 2026-05-03
 
 ### Fixed — Weather fanart background black screen

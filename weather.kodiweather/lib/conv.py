@@ -194,6 +194,13 @@ def speed(value=False, kodi=False):
 
 # Direction
 def direction(deg):
+	# Coerce to int so float inputs (e.g. 11.5, 33.7) don't fall through
+	# the integer ranges below and return None. Guard non-numeric inputs.
+	try:
+		deg = int(round(float(deg)))
+	except (TypeError, ValueError):
+		return ''
+
 	if deg >= 349 or deg <=  11:
 		return utils.loc(71)
 	elif deg >= 12 and deg <= 33:
@@ -380,6 +387,13 @@ def dp(value, setting):
 
 # Moonphase
 def moonphase(deg):
+	# Coerce to int so float inputs don't fall through the discrete-equality
+	# boundary checks (358..2, 88..92, etc.) and return None.
+	try:
+		deg = int(round(float(deg)))
+	except (TypeError, ValueError):
+		return ''
+
 	if deg == 358 or deg == 359 or deg == 0 or deg == 1 or deg == 2:
 		return utils.locaddon(32440)
 	elif deg >= 3 and deg <= 87:
@@ -398,6 +412,13 @@ def moonphase(deg):
 		return utils.locaddon(32447)
 
 def moonphaseimage(deg):
+	# Same float-gap fix as moonphase(): coerce to int so non-integer
+	# inputs map cleanly to one of the eight phase images.
+	try:
+		deg = int(round(float(deg)))
+	except (TypeError, ValueError):
+		return '0.png'
+
 	if deg == 358 or deg == 359 or deg == 0 or deg == 1 or deg == 2:
 		return '0.png'
 	elif deg >= 3 and deg <= 87:
@@ -424,11 +445,15 @@ def season(lat):
 	else:
 		n = False
 
-	if d >= 80 and d <= 172:
+	# Half-open intervals: the boundary day belongs to the *new* season.
+	# Originally these used closed intervals on both ends, which meant day 172
+	# (summer solstice) returned spring, day 264 (autumn equinox) returned
+	# summer, and day 355 (winter solstice) returned autumn.
+	if d >= 80 and d < 172:
 		return utils.locaddon(32471) if n else utils.locaddon(32473)
-	elif d >= 172 and d <= 264:
+	elif d >= 172 and d < 264:
 		return utils.locaddon(32472) if n else utils.locaddon(32474)
-	elif d >= 264 and d <= 355:
+	elif d >= 264 and d < 355:
 		return utils.locaddon(32473) if n else utils.locaddon(32471)
 	else:
 		return utils.locaddon(32474) if n else utils.locaddon(32472)

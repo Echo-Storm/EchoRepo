@@ -623,16 +623,14 @@ class Main():
 		utils.addprop('location', config.loc.name)
 		self.setlocs()
 
-		# Stable fanart background
-		# current.fanartcode holds the folder code (e.g. 32 for Sunny).
-		# get_fanartbg() picks one specific image from that folder and holds
-		# it until the code actually changes, so the home-screen background
-		# does not cycle or flicker on every service tick or focus change.
+		# Stable fanart background.
+		# Always call get_fanartbg — the function has its own three-level
+		# fallback (cached real image -> per-code folder -> previously cached
+		# real image when fanartcode is empty -> Fallback_*.jpg), so the home
+		# screen almost never goes black even when fanartcode is missing
+		# during a partial weather.json read or a weather_code:null hiccup.
 		fanartcode = config.loc.prop.get('current.fanartcode', '')
-		if fanartcode != '':
-			utils.addprop('current.fanartbg', config.get_fanartbg(fanartcode, config.loc.id))
-		else:
-			utils.addprop('current.fanartbg', '')
+		utils.addprop('current.fanartbg', config.get_fanartbg(fanartcode, config.loc.id))
 
 		# Fetched
 		for prop in [ 'current', 'weather', 'hourly', 'daily', 'timeofday', 'map' ]:

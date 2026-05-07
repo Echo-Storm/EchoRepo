@@ -34,6 +34,11 @@ map_providers = {
 iem_frame_offsets = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
 
 # Limits
+# NOTE: maxdays is a module-level global because it's read by api.py, utils.py,
+# and weather.py via `config.maxdays`. The import-time value below is a safe
+# fallback that's used only for the brief window before config.init() runs.
+# config.init() -> addon() refreshes maxdays so a settings change actually
+# takes effect without needing a Kodi restart.
 try:
 	maxdays = utils.setting('fcdays', 'int')
 	if maxdays < 3:
@@ -436,36 +441,75 @@ _fanartbg_state = {}
 def get_fanartbg(code, locid):
 	"""Return a stable full image path for the given fanart code and location.
 
-	A new image is picked at random only when the code changes (i.e. when the
-	weather condition or day/night state changes).  Between those events the
-	same image is returned every time, so the home-screen background does not
-	cycle or flicker.
+	Three-level fallback chain so the home-screen background almost never goes
+	black, even when the per-code folder is missing/empty or `code` itself is
+	empty (which happens briefly when weather.json is partial or weather_code
+	comes back null from Open-Meteo):
 
-	Returns a special:// path to a specific file, or '' if none can be found.
+	  1. Real per-code folder under resources/{code}/  — cached, stable.
+	  2. Previously-cached real image when called with an empty code — preserves
+	     the last good background instead of degrading to a Fallback.
+	  3. resources/Fallback_*.jpg — cached with a `fallback` flag so the next
+	     tick re-tries the real folder and recovers automatically.
+	  4. '' — only if the resource pack itself is unreadable (very rare).
+
+	Returns a special:// path or '' if absolutely nothing is available.
 	"""
 	key      = str(locid)
-	code_str = str(code)
+	# Treat None and '' the same — both mean "no usable code this tick".
+	code_str = '' if code in (None, '') else str(code)
 	entry    = _fanartbg_state.get(key, {})
 
-	# Code unchanged and we already have a valid path — keep it.
-	if entry.get('code') == code_str and entry.get('path'):
+	# Cache hit on a real (non-Fallback) image for the same code — keep it.
+	if not entry.get('fallback') and entry.get('code') == code_str and entry.get('path') and code_str:
 		return entry['path']
 
-	# Code changed (or first run) — pick one image and lock it in.
-	# Use special:// throughout — avoids os.path mixed separators on Windows.
+	# Empty code: prefer the last known-good real image over a Fallback.
+	# This handles the "fanartcode briefly missing" failure mode without
+	# flickering away from a perfectly fine background.
+	if not code_str and not entry.get('fallback') and entry.get('path'):
+		return entry['path']
+
+	# Try the per-code folder.
+	if code_str:
+		try:
+			folder_uri = f'special://home/addons/resource.images.weatherfanart.echo/resources/{code_str}/'
+			_, files   = xbmcvfs.listdir(folder_uri)
+			imgs       = [f for f in files if f.lower().endswith(('.jpg', '.jpeg', '.png', '.webp'))]
+			if imgs:
+				chosen = random.choice(imgs)
+				path   = f'{folder_uri}{chosen}'
+				_fanartbg_state[key] = {'code': code_str, 'path': path, 'fallback': False}
+				utils.log(f'[LOC{locid}] fanartbg: code={code_str} -> {chosen}', 3)
+				return path
+		except Exception as e:
+			utils.log(f'[LOC{locid}] fanartbg: per-code listdir failed for {code_str!r}: {e}', 3)
+
+	# Per-code lookup failed (or code was empty). If we already picked a
+	# Fallback in this state, keep it stable instead of flicking between
+	# different Fallbacks on every service tick.
+	if entry.get('fallback') and entry.get('path'):
+		return entry['path']
+
+	# Final fallback: random Fallback_*.jpg from resources/.
 	try:
-		folder_uri = f'special://home/addons/resource.images.weatherfanart.echo/resources/{code_str}/'
-		_, files   = xbmcvfs.listdir(folder_uri)
-		imgs       = [f for f in files if f.lower().endswith(('.jpg', '.jpeg', '.png', '.webp'))]
-
-		if imgs:
-			chosen = random.choice(imgs)
-			path   = f'{folder_uri}{chosen}'
-			_fanartbg_state[key] = {'code': code_str, 'path': path}
+		root_uri  = 'special://home/addons/resource.images.weatherfanart.echo/resources/'
+		_, files  = xbmcvfs.listdir(root_uri)
+		fallbacks = [f for f in files
+		             if f.lower().startswith('fallback_')
+		             and f.lower().endswith(('.jpg', '.jpeg', '.png', '.webp'))]
+		if fallbacks:
+			chosen = random.choice(fallbacks)
+			path   = f'{root_uri}{chosen}'
+			# Cache with fallback flag so the cache check at top doesn't
+			# treat this as a "real" hit, but the stability check above does.
+			_fanartbg_state[key] = {'code': code_str, 'path': path, 'fallback': True}
+			utils.log(f'[LOC{locid}] fanartbg: using Fallback {chosen} (code={code_str!r})', 3)
 			return path
-	except Exception:
-		pass
+	except Exception as e:
+		utils.log(f'[LOC{locid}] fanartbg: Fallback listdir failed: {e}', 3)
 
+	utils.log(f'[LOC{locid}] fanartbg: no image available (code={code_str!r}); returning empty', 2)
 	return ''
 
 # Graph (Resolution)
@@ -895,6 +939,18 @@ def addon(cache=False):
 		addon.maxlocs = 6
 	else:
 		addon.maxlocs = 4
+
+	# Refresh module-level maxdays so a settings change to 'fcdays' takes
+	# effect on the next service tick instead of requiring a Kodi restart.
+	# Read via config.maxdays in api.py, utils.py, and weather.py.
+	global maxdays
+	try:
+		new_maxdays = utils.setting('fcdays', 'int', cache)
+		if new_maxdays < 3:
+			new_maxdays = 8
+	except (ValueError, TypeError):
+		new_maxdays = 8
+	maxdays = new_maxdays
 
 def kodi():
 	kodi.long     = utils.region('datelong')

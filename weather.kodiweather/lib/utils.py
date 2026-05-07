@@ -130,7 +130,11 @@ def locaddon(arg):
 def notification(header, msg, icon, locid):
 	log(f'[LOC{locid}] Notification: {header} - {msg}')
 
-	duration = (setting('alert_duration', 'int') - 2) * 1000
+	# Floor at 3 seconds so a corrupt or missing alert_duration setting (which
+	# our guarded setting() returns as 0) can't pass a non-positive duration
+	# to xbmcgui. Same floor that weather.py:notification uses.
+	seconds  = max(3, setting('alert_duration', 'int'))
+	duration = (seconds - 2) * 1000
 	xbmcgui.Dialog().notification(header, msg, icon, int(duration))
 
 # Datetime
@@ -221,6 +225,11 @@ def getprop(data, map, idx, count):
 			content = data[map[1][0]][map[1][1]][map[1][2]][idx]
 		else:
 			content = data[map[1][0]][map[1][1]][map[1][2]]
+	else:
+		# Defensive fallthrough: previously this left `content` unbound and
+		# raised UnboundLocalError two lines below. setmap's TypeError handler
+		# catches this and logs a clean message instead of crashing the update.
+		raise TypeError(f'Unsupported map[1] key path length {len(map[1])}: {map[1]!r}')
 
 	if content is None:
 		raise TypeError('No data')
