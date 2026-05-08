@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<addon id="plugin.video.echoondemand" name="Echo OnDemand" version="2.6.0" provider-name="Echo-Storm">
+<addon id="plugin.video.echoondemand" name="Echo OnDemand" version="3.0.0" provider-name="Echo-Storm">
   <requires>
     <import addon="xbmc.python" version="3.0.0"/>
     <import addon="xbmc.gui" version="5.17.0"/>
@@ -9,8 +9,8 @@
     <provides>video</provides>
   </extension>
   <extension point="xbmc.addon.metadata">
-    <summary lang="en_GB">Echo OnDemand — IPTV VOD + Wrestling + Fights replays</summary>
-    <description lang="en_GB">Browse and play Movies and Series from your Xtream Codes IPTV service, plus three on-demand replay sources via debrid: Wrestling Rewind, Wrestling on Demand (WWE / AEW / TNA / NJPW / ROH / NWA / Indy / Documentaries / Archive), and Fights on Demand (UFC PPV and Fight Night, MMA, Boxing — including a Free / No Debrid sub-menu). Movies listed by genre. Series support full season and episode navigation. Results cached locally. Kodi Omega (v21) compatible. Requires script.module.resolveurl with an active debrid account.</description>
+    <summary lang="en_GB">Echo OnDemand — IPTV VOD + Wrestling + Fights + Live</summary>
+    <description lang="en_GB">Browse and play Movies and Series from your Xtream Codes IPTV service, plus three on-demand replay sources via debrid: Wrestling Rewind, Wrestling on Demand (WWE / AEW / TNA / NJPW / ROH / NWA / Indy / Documentaries / Archive), and Fights on Demand (UFC PPV and Fight Night, MMA, Boxing — including a Free / No Debrid sub-menu). Includes a Live category for streaming wrestling channels. Settings backup/restore protects credentials across reinstalls. Movies listed by genre. Series support full season and episode navigation. Results cached locally. Kodi Omega (v21) compatible. Requires script.module.resolveurl with an active debrid account.</description>
     <platform>all</platform>
     <assets>
       <icon>icon.png</icon>

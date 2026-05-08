@@ -1,9 +1,35 @@
 #!/usr/bin/env python3
 """
-plugin.video.echoondemand — Echo OnDemand  v2.6.0
+plugin.video.echoondemand — Echo OnDemand  v3.0.0
 Kodi Omega (v21) plugin for browsing and playing VOD content (Movies and Series)
-from an Xtream Codes IPTV service, plus three on-demand replay sources via debrid:
-Wrestling Rewind, Wrestling on Demand, and Fights on Demand (UFC/MMA/Boxing).
+from an Xtream Codes IPTV service, plus three on-demand replay sources via debrid
+(Wrestling Rewind, Wrestling on Demand, Fights on Demand) and a Live category
+(currently Live Wrestling — extensible).
+
+Changes in 3.0.0 (Live category, rename, settings backup, icon refresh):
+  - NEW: Live category with sub-menu (STATIC_MENUS['live_root']).  Currently
+    contains 'Live Wrestling' (WOD's live.xml feed).  FOD is a replay-only
+    service upstream; Wrestling Rewind is also replay-only.  The parent menu
+    is in place so future live sources are a STATIC_MENUS edit away.
+  - RENAME: Root entry 'Wrestling' → 'Wrestling Rewind' for honest labeling.
+    Each replay source now sits one click from the root menu, matching how
+    Movies and Series are organised.  No URL change — bookmarks still work.
+  - NEW: Backup / Restore Settings — two root menu entries that read/write a
+    snapshot of all four user settings (username, password, buffer_secs,
+    tmdb_api_key) to special://userdata/echoondemand_settings.json.  This
+    file lives one level up from the addon's own userdata directory and
+    survives a full uninstall.  Useful for users who install fresh zips
+    instead of using Kodi's update flow.
+  - ICONS: 17 new/refreshed icons in resources/images/genres/.  TNA, NWA,
+    NJPW, ROH, RPW, INDY, MMA, LIVE, LIVE WRESTLING, WRESTLEMANIA, PPV,
+    DOCS, LATEST, FREE, WOD, FOD all match the existing template style.
+    The blank-placeholder Wrestling.png is now a proper 'WRESTLING' icon.
+  - STATIC_MENUS: icon_label fields updated to point at the new icons where
+    appropriate.  No structural change — same dispatch model.
+  - DOCS: README and HANDOFF cover the upgrade flow explicitly.  Kodi
+    preserves userdata across 'Install from zip' over an existing addon,
+    but 'Uninstall' (then reinstall) wipes it.  The new Backup/Restore
+    feature is the safety net for the latter case.
 
 Changes in 2.6.0 (audit + WOD/FOD integration):
   - NEW: Wrestling on Demand (WOD) section.  Curated category tree pointing at
@@ -121,7 +147,9 @@ Routing:
   mode=wr_list      wr_url=X [wr_title=Y]  -> list_wr(wr_url, wr_title)
   mode=wr_play      wr_item=X              -> play_wr(wr_item)
   mode=static_menu  key=K  title=T         -> list_static_menu(key, title)
-                                              (drives WOD and FOD curated trees)
+                                              (drives WOD, FOD, and Live trees)
+  mode=settings_backup                      -> do_settings_backup()
+  mode=settings_restore                     -> do_settings_restore()
   mode=refresh                             -> clear all cache, reload root
 
 Cache strategy (all files in addon profile directory):
@@ -245,20 +273,29 @@ STATIC_MENUS = {
                                           'icon_label': 'WWE SmackDown'},
         {'title': 'NXT',                  'wr_url':     WOD_BASE + '/latestshows/nxtmain.xml',
                                           'icon_label': 'NXT'},
-        {'title': 'Latest Shows',         'wr_url':     WOD_BASE + '/latestshows/latestshows.xml'},
-        {'title': 'WrestleMania',         'wr_url':     WOD_BASE + '/wrestlemania/mainwm.xml'},
-        {'title': 'PPV Events',           'wr_url':     WOD_BASE + '/ppv/ppvmain.xml'},
+        {'title': 'Latest Shows',         'wr_url':     WOD_BASE + '/latestshows/latestshows.xml',
+                                          'icon_label': 'Latest Shows'},
+        {'title': 'WrestleMania',         'wr_url':     WOD_BASE + '/wrestlemania/mainwm.xml',
+                                          'icon_label': 'WrestleMania'},
+        {'title': 'PPV Events',           'wr_url':     WOD_BASE + '/ppv/ppvmain.xml',
+                                          'icon_label': 'PPV Events'},
         {'title': 'WWE YouTube',          'wr_url':     WOD_BASE + '/wweyt.xml'},
     ],
     'wod_other': [
         {'title': 'AEW',                  'wr_url':     WOD_BASE + '/aew/aewppv.xml',
                                           'icon_label': 'AEW'},
-        {'title': 'TNA / Impact',         'wr_url':     WOD_BASE + '/tna/tnamain.xml'},
-        {'title': 'NWA',                  'wr_url':     WOD_BASE + '/nwa/main.xml'},
-        {'title': 'NJPW',                 'wr_url':     WOD_BASE + '/njpw/njpwmain.xml'},
-        {'title': 'ROH',                  'wr_url':     WOD_BASE + '/roh/main.xml'},
-        {'title': 'RPW',                  'wr_url':     WOD_BASE + '/random/rpw.xml'},
-        {'title': 'Indy Wrestling',       'wr_url':     WOD_BASE + '/indy.xml'},
+        {'title': 'TNA / Impact',         'wr_url':     WOD_BASE + '/tna/tnamain.xml',
+                                          'icon_label': 'TNA'},
+        {'title': 'NWA',                  'wr_url':     WOD_BASE + '/nwa/main.xml',
+                                          'icon_label': 'NWA'},
+        {'title': 'NJPW',                 'wr_url':     WOD_BASE + '/njpw/njpwmain.xml',
+                                          'icon_label': 'NJPW'},
+        {'title': 'ROH',                  'wr_url':     WOD_BASE + '/roh/main.xml',
+                                          'icon_label': 'ROH'},
+        {'title': 'RPW',                  'wr_url':     WOD_BASE + '/random/rpw.xml',
+                                          'icon_label': 'RPW'},
+        {'title': 'Indy Wrestling',       'wr_url':     WOD_BASE + '/indy.xml',
+                                          'icon_label': 'Indy Wrestling'},
     ],
 
     # ---------- Fights on Demand ----------
@@ -266,7 +303,8 @@ STATIC_MENUS = {
         {'title': 'Latest UFC / MMA',     'wr_url':     FOD_BASE + '/latestufc-mmaevents.xml',
                                           'icon_label': 'UFC Replays'},
         {'title': 'UFC Events',           'menu_key':   'fod_ufc'},
-        {'title': 'MMA Events',           'wr_url':     FOD_BASE + '/mmaevents/mmaeventreplaysmain-new.xml'},
+        {'title': 'MMA Events',           'wr_url':     FOD_BASE + '/mmaevents/mmaeventreplaysmain-new.xml',
+                                          'icon_label': 'MMA'},
         {'title': 'Boxing',               'wr_url':     FOD_BASE + '/boxing/boxingreplays-new.xml',
                                           'icon_label': 'Boxing Replays'},
         {'title': 'Free (No Debrid)',     'menu_key':   'fod_free'},
@@ -287,10 +325,23 @@ STATIC_MENUS = {
         {'title': 'UFC Events Main',      'wr_url':     FOD_BASE + '/ufcevents/ufceventreplaysmain-new.xml'},
     ],
     'fod_free': [
-        {'title': 'Free UFC',             'wr_url':     FOD_BASE + '/nondebridufc.xml'},
-        {'title': 'Free MMA',             'wr_url':     FOD_BASE + '/nondebridmmareplays.xml'},
+        {'title': 'Free UFC',             'wr_url':     FOD_BASE + '/nondebridufc.xml',
+                                          'icon_label': 'Free'},
+        {'title': 'Free MMA',             'wr_url':     FOD_BASE + '/nondebridmmareplays.xml',
+                                          'icon_label': 'Free'},
         {'title': 'Free Boxing',          'wr_url':     FOD_BASE + '/boxing/boxingreplays-nondebrid.xml',
                                           'icon_label': 'Boxing Replays'},
+    ],
+
+    # ---------- Live ----------
+    # Live category — currently single-source (WOD's 24/7 wrestling channels).
+    # FOD is a replay service upstream and has no live feed.  Wrestling Rewind
+    # is also replay-only.  This sub-menu structure is in place so future live
+    # sources are a one-entry edit away rather than a code change.
+    'live_root': [
+        {'title': 'Live Wrestling',       'wr_url':     WOD_BASE + '/live.xml',
+                                          'icon_label': 'Live Wrestling'},
+        # Future: add Live Fights / Live Sports here when upstream feeds appear.
     ],
 }
 
@@ -910,13 +961,16 @@ def list_root(update_listing=False):
     # Wrestling Rewind — single feed URL drives the whole tree.
     # Soft-coded: settings 'wr_root_url' overrides the default if present
     # (see HANDOFF.md re: pointing at a mirror without a code change).
+    # Renamed from plain 'Wrestling' in v3.0.0 — three replay sources now
+    # sit alongside each other at the root level for honest labelling.
     wr_root = ADDON.getSetting('wr_root_url').strip()
     if not wr_root:
         wr_root = 'https://mylostsoulspace.co.uk/WrestlingRewind/xmls/wrestlingrewind-main.xml'
-    li = xbmcgui.ListItem(label='Wrestling', offscreen=True)
+    li = xbmcgui.ListItem(label='Wrestling Rewind', offscreen=True)
     li.setArt({'icon': ADDON_ICON, 'thumb': ADDON_ICON, 'fanart': ADDON_FANART})
     xbmcplugin.addDirectoryItem(
-        HANDLE, build_url(mode='wr_list', wr_url=wr_root, wr_title='Wrestling'),
+        HANDLE,
+        build_url(mode='wr_list', wr_url=wr_root, wr_title='Wrestling Rewind'),
         li, isFolder=True
     )
 
@@ -938,6 +992,36 @@ def list_root(update_listing=False):
         HANDLE,
         build_url(mode='static_menu', key='fod_root', title='Fights on Demand'),
         li, isFolder=True
+    )
+
+    # Live — currently single-source (Live Wrestling from WOD's live.xml).
+    # Parent menu is in place for future expansion when live fight feeds
+    # appear upstream.  See STATIC_MENUS['live_root'].
+    li = xbmcgui.ListItem(label='Live', offscreen=True)
+    li.setArt({'icon': ADDON_ICON, 'thumb': ADDON_ICON, 'fanart': ADDON_FANART})
+    xbmcplugin.addDirectoryItem(
+        HANDLE,
+        build_url(mode='static_menu', key='live_root', title='Live'),
+        li, isFolder=True
+    )
+
+    # Settings backup / restore — both pinned to the bottom alongside Refresh.
+    # SpecialSort=bottom keeps them out of the way; new in v3.0.0 as a safety
+    # net for users who fully uninstall + reinstall (which wipes Kodi's
+    # per-addon userdata).  Backup writes to special://userdata/, one level
+    # above the addon's profile dir, so it survives addon uninstall.
+    li = xbmcgui.ListItem(label='Backup Settings', offscreen=True)
+    li.setArt({'icon': ADDON_ICON, 'fanart': ADDON_FANART})
+    li.setProperty('SpecialSort', 'bottom')
+    xbmcplugin.addDirectoryItem(
+        HANDLE, build_url(mode='settings_backup'), li, isFolder=False
+    )
+
+    li = xbmcgui.ListItem(label='Restore Settings', offscreen=True)
+    li.setArt({'icon': ADDON_ICON, 'fanart': ADDON_FANART})
+    li.setProperty('SpecialSort', 'bottom')
+    xbmcplugin.addDirectoryItem(
+        HANDLE, build_url(mode='settings_restore'), li, isFolder=False
     )
 
     # Pinned to bottom of the list so it stays out of the way.
@@ -1516,6 +1600,132 @@ def play_wr(wr_item):
 
 
 # ---------------------------------------------------------------------------
+# Settings backup / restore
+# ---------------------------------------------------------------------------
+# Kodi normally preserves settings across addon upgrades — when you "Install
+# from zip" over an existing addon, userdata/addon_data/<addon_id>/settings.xml
+# is left alone.  But if a user fully uninstalls and then reinstalls (a common
+# workflow for hobbyist users sideloading zips), Kodi wipes that directory.
+#
+# Backup/Restore writes a JSON snapshot one level up — to special://userdata/
+# itself — which survives any single-addon uninstall.  The file lives at:
+#     special://userdata/echoondemand_settings.json
+#
+# Format:
+#     {
+#         "version":  1,
+#         "ts":       <unix timestamp>,
+#         "settings": { "<setting_id>": "<value>", ... }
+#     }
+#
+# Currently captures all four user-facing settings: username, password,
+# buffer_secs, tmdb_api_key.  Adding settings later is a one-line edit to
+# _BACKUP_KEYS below.
+
+_BACKUP_KEYS = ('username', 'password', 'buffer_secs', 'tmdb_api_key')
+_BACKUP_VERSION = 1
+
+
+def _backup_path():
+    """Path to the settings backup JSON, outside the addon's own userdata dir."""
+    base = xbmcvfs.translatePath('special://userdata/')
+    if isinstance(base, bytes):
+        base = base.decode('utf-8')
+    return os.path.join(base, 'echoondemand_settings.json')
+
+
+def do_settings_backup():
+    """Snapshot all _BACKUP_KEYS settings to the user-level userdata directory."""
+    snapshot = {
+        'version':  _BACKUP_VERSION,
+        'ts':       time.time(),
+        'settings': {k: ADDON.getSetting(k) for k in _BACKUP_KEYS},
+    }
+    path = _backup_path()
+    try:
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(snapshot, f, indent=2)
+        log('Settings backup written to {}'.format(path), xbmc.LOGINFO)
+        xbmcgui.Dialog().notification(
+            'Echo OnDemand', 'Settings backed up.', time=2500
+        )
+    except Exception as e:
+        log('Settings backup FAILED: {}'.format(e), xbmc.LOGERROR)
+        xbmcgui.Dialog().ok(
+            'Echo OnDemand',
+            'Could not write settings backup:\n{}'.format(e)
+        )
+
+
+def do_settings_restore():
+    """Read the backup snapshot and write each value back via ADDON.setSetting."""
+    path = _backup_path()
+    if not os.path.exists(path):
+        xbmcgui.Dialog().ok(
+            'Echo OnDemand',
+            'No backup found at:\n{}\n\nUse "Backup Settings" first.'.format(path)
+        )
+        return
+
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            snapshot = json.load(f)
+    except Exception as e:
+        log('Settings restore: read failed: {}'.format(e), xbmc.LOGERROR)
+        xbmcgui.Dialog().ok(
+            'Echo OnDemand',
+            'Backup file unreadable:\n{}'.format(e)
+        )
+        return
+
+    # Version guard — if the snapshot was written by a future Echo OnDemand
+    # with an incompatible schema, refuse rather than silently corrupting.
+    snap_version = safe_int(snapshot.get('version', 0))
+    if snap_version > _BACKUP_VERSION:
+        xbmcgui.Dialog().ok(
+            'Echo OnDemand',
+            'Backup is from a newer addon version ({}) than this one ({}).\n'
+            'Refusing to restore.'.format(snap_version, _BACKUP_VERSION)
+        )
+        return
+
+    settings = snapshot.get('settings', {})
+    if not isinstance(settings, dict):
+        xbmcgui.Dialog().ok(
+            'Echo OnDemand', 'Backup file is malformed (settings field).'
+        )
+        return
+
+    # Confirm before overwriting current values — one click of the wrong menu
+    # entry shouldn't silently replace a working configuration.
+    confirmed = xbmcgui.Dialog().yesno(
+        'Echo OnDemand',
+        'Restore settings from backup?\n'
+        'Current Settings will be overwritten.',
+        nolabel='Cancel', yeslabel='Restore'
+    )
+    if not confirmed:
+        return
+
+    restored = 0
+    for key in _BACKUP_KEYS:
+        if key in settings:
+            try:
+                ADDON.setSetting(key, str(settings[key] or ''))
+                restored += 1
+            except Exception as e:
+                log('Settings restore: failed to set {}: {}'.format(key, e),
+                    xbmc.LOGWARNING)
+    log('Settings restore: {} keys applied from {}'.format(restored, path),
+        xbmc.LOGINFO)
+    xbmcgui.Dialog().notification(
+        'Echo OnDemand',
+        'Restored {} setting{}.'.format(restored, '' if restored == 1 else 's'),
+        time=2500
+    )
+
+
+# ---------------------------------------------------------------------------
 # Refresh
 # ---------------------------------------------------------------------------
 
@@ -1570,6 +1780,10 @@ def router(paramstring):
         play_wr(wr_item)
     elif mode == 'static_menu':
         list_static_menu(menu_key, menu_title)
+    elif mode == 'settings_backup':
+        do_settings_backup()
+    elif mode == 'settings_restore':
+        do_settings_restore()
     elif mode == 'refresh':
         do_refresh()
     else:
