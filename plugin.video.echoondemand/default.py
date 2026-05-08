@@ -1,10 +1,27 @@
 #!/usr/bin/env python3
 """
-plugin.video.echoondemand — Echo OnDemand  v3.0.0
+plugin.video.echoondemand — Echo OnDemand  v3.0.1
 Kodi Omega (v21) plugin for browsing and playing VOD content (Movies and Series)
 from an Xtream Codes IPTV service, plus three on-demand replay sources via debrid
 (Wrestling Rewind, Wrestling on Demand, Fights on Demand) and a Live category
 (currently Live Wrestling — extensible).
+
+Changes in 3.0.1 (live HLS fixes + audit):
+  - FIX: play_wr now sets inputstream.adaptive properties when the resolved
+    URL is HLS (.m3u8 manifests, Pluto TV stitcher URLs).  Kodi's built-in
+    demuxer can fail on session-bound HLS streams with 'Error creating
+    demuxer'; ISA's HLS handler is more forgiving.  No-op for direct
+    mp4/mkv files; harmless if inputstream.adaptive isn't installed.
+    The user-visible symptom this fixes: some live wrestling channels
+    (notably some Pluto-backed ones like AEW) failing to play while
+    others on the same feed worked fine.
+  - FIX: list_wr log message no longer prints 'skipping item item' when an
+    item-type entry has an empty link (cosmetic only — the skip itself
+    was correct).
+  - CONSISTENCY: wr_title default is now 'Wrestling Rewind' to match the
+    root rename; previously the function signature still said 'Wrestling'.
+    Only affects the fallback when no wr_title is passed (which the live
+    code paths always do).
 
 Changes in 3.0.0 (Live category, rename, settings backup, icon refresh):
   - NEW: Live category with sub-menu (STATIC_MENUS['live_root']).  Currently
@@ -1395,6 +1412,39 @@ def _wr_ttl():
     return 1800
 
 
+def _looks_like_hls(url):
+    """True if URL is most likely an HLS stream.
+
+    Looks for the canonical .m3u8 manifest extension anywhere in the URL,
+    plus the Pluto TV stitcher path which serves HLS even when the .m3u8
+    suffix is buried inside query parameters.
+    """
+    if not isinstance(url, str):
+        return False
+    u = url.lower()
+    return '.m3u8' in u or 'pluto.tv/stitch/hls/' in u
+
+
+def _apply_isa_properties(li, url):
+    """Set inputstream.adaptive properties on a ListItem when the URL is HLS.
+
+    No-op when the URL doesn't look like HLS, and the properties are simply
+    ignored if inputstream.adaptive isn't installed — so this is safe to
+    call unconditionally before setResolvedUrl.
+
+    Why this exists: Kodi's built-in demuxer can fail on session-bound HLS
+    streams, particularly Pluto TV's stitcher (which is what backs WOD's
+    live wrestling channels — see live.xml).  ISA's HLS handler is more
+    forgiving with these.  Symptom on the failing path is a log line like
+    'CVideoPlayer::OpenDemuxStream - Error creating demuxer' immediately
+    after the URL is opened.
+    """
+    if not _looks_like_hls(url):
+        return
+    li.setProperty('inputstream', 'inputstream.adaptive')
+    li.setProperty('inputstream.adaptive.manifest_type', 'hls')
+
+
 def list_static_menu(menu_key, menu_title):
     """
     Render a hardcoded category tree from STATIC_MENUS.
@@ -1450,7 +1500,7 @@ def list_static_menu(menu_key, menu_title):
     xbmcplugin.endOfDirectory(HANDLE)
 
 
-def list_wr(wr_url, wr_title='Wrestling'):
+def list_wr(wr_url, wr_title='Wrestling Rewind'):
     """
     Fetch and display one level of a MicroJen feed (Wrestling Rewind, WOD, FOD).
 
@@ -1508,7 +1558,7 @@ def list_wr(wr_url, wr_title='Wrestling'):
         # Skip ANY entry with an empty link — for dir items they'd navigate
         # to a broken URL, for item-type they'd hit "No playable link" on click.
         if not raw_link:
-            log('list_wr: skipping {} item "{}" with empty link'.format(
+            log('list_wr: skipping {} "{}" — empty link'.format(
                 item_type, title), xbmc.LOGWARNING)
             continue
 
@@ -1594,6 +1644,11 @@ def play_wr(wr_item):
 
     li = xbmcgui.ListItem(path=url)
     li.setContentLookup(False)
+    # If the resolved URL is HLS (Pluto TV live channels, .m3u8 manifests),
+    # hand it to inputstream.adaptive — Kodi's built-in demuxer can fail on
+    # session-bound HLS.  No-op for direct mp4/mkv/etc. and harmless if ISA
+    # isn't installed.
+    _apply_isa_properties(li, url)
 
     xbmcplugin.setResolvedUrl(HANDLE, True, li)
     _apply_buffer(get_buffer_secs())
@@ -1752,7 +1807,7 @@ def router(paramstring):
     vod_name  = params.get('vod_name', '')
     vod_year  = safe_int(params.get('vod_year', 0))
     wr_url    = params.get('wr_url', '')
-    wr_title  = params.get('wr_title', 'Wrestling')
+    wr_title  = params.get('wr_title', 'Wrestling Rewind')
     wr_item   = params.get('wr_item', '')
     # Static menu params (WOD/FOD curated trees).
     menu_key   = params.get('key', '')

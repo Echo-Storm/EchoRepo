@@ -283,6 +283,9 @@ Fixed in v2.5.0. All error paths now call `endOfDirectory(succeeded=False)`. If 
 **Cache cleared but TMDB backdrops are still cached**
 Intentional in v2.6.0+. The TMDB cache (`tmdb_fanart.json`) is preserved across "Refresh / Clear Cache" because it accumulates over many plays. To wipe it, delete the file manually from the addon profile directory.
 
+**A live channel fails to play with "Error creating demuxer" in the Kodi log**
+Some live channels are HLS streams served by Pluto TV's stitcher (or other HLS sources) — Kodi's built-in demuxer can fail on these. v3.0.1 hands HLS URLs to `inputstream.adaptive` automatically, which handles them more reliably. If it still fails: confirm `inputstream.adaptive` is installed and enabled (Add-ons → My add-ons → VideoPlayer InputStream → InputStream Adaptive). If one channel works and another doesn't, the failing channel may have a stale session token in the upstream feed (out of our control) or a codec your hardware doesn't decode.
+
 **Lost settings after reinstalling the addon**
 Use the Backup Settings entry before uninstalling, and Restore Settings after reinstalling. See "Upgrading from a previous version" above for prevention. Backup file lives at `<KODI_HOME>/userdata/echoondemand_settings.json`.
 
