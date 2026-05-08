@@ -1,10 +1,25 @@
 #!/usr/bin/env python3
 """
-plugin.video.echoondemand — Echo OnDemand  v3.0.1
+plugin.video.echoondemand — Echo OnDemand  v3.0.2
 Kodi Omega (v21) plugin for browsing and playing VOD content (Movies and Series)
 from an Xtream Codes IPTV service, plus three on-demand replay sources via debrid
 (Wrestling Rewind, Wrestling on Demand, Fights on Demand) and a Live category
 (currently Live Wrestling — extensible).
+
+Changes in 3.0.2 (Pluto TV header fix + ISA cleanup):
+  - FIX: Pluto TV channels (TNA WRESTLING 24/7, LUCHA LIBRE AAA 24/7, and
+    similar in WOD's live.xml) were failing with HTTP 403 from the Pluto
+    stitcher CDN.  Pluto's edge servers reject requests that don't look
+    like they came from a web browser.  play_wr now sets inputstream.adaptive
+    manifest_headers and stream_headers with a Chrome-shaped User-Agent and
+    a pluto.tv Referer when the resolved URL is a Pluto stream.  Non-Pluto
+    HLS streams (WWE Network from CloudFront, etc.) are left alone — the
+    headers only apply when the URL contains pluto.tv.
+  - CLEANUP: Dropped the deprecated `inputstream.adaptive.manifest_type=hls`
+    property.  Kodi 21 (Omega) auto-detects manifest type from the response
+    Content-Type / URL extension; setting it explicitly produced a
+    deprecation warning in the Kodi log on every play.  Removing it
+    silences that warning without changing behaviour.
 
 Changes in 3.0.1 (live HLS fixes + audit):
   - FIX: play_wr now sets inputstream.adaptive properties when the resolved
@@ -196,7 +211,7 @@ import os
 import time
 import glob
 import base64
-from urllib.parse import parse_qsl, urlencode
+from urllib.parse import parse_qsl, urlencode, quote
 from urllib.request import urlopen, Request
 
 import xbmc
@@ -1412,6 +1427,31 @@ def _wr_ttl():
     return 1800
 
 
+# ---------------------------------------------------------------------------
+# Pluto TV HLS header workaround
+# ---------------------------------------------------------------------------
+# Pluto's edge servers (cfd-v4-service-channel-stitcher-*.prd.pluto.tv) check
+# the request's User-Agent and return HTTP 403 for clients that don't look
+# like a web browser.  Setting a Chrome-shaped UA and a pluto.tv Referer via
+# inputstream.adaptive's header properties is enough to clear that.
+#
+# This affects WOD's live wrestling channels — most of them stream from
+# Pluto.  Without these headers, ISA fetches the manifest and gets 403'd
+# back (visible in the Kodi log as "Download failed, HTTP error 403"
+# from inputstream.adaptive).  Non-Pluto HLS streams (e.g., the WWE
+# Network CloudFront feed) work without any of this and are left alone.
+
+_BROWSER_UA = (
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+    'AppleWebKit/537.36 (KHTML, like Gecko) '
+    'Chrome/120.0.0.0 Safari/537.36'
+)
+_PLUTO_HEADERS = urlencode({
+    'User-Agent': _BROWSER_UA,
+    'Referer':    'https://pluto.tv/',
+}, quote_via=quote)   # %20 for spaces, not '+' — Python docs recommend quote for HTTP headers
+
+
 def _looks_like_hls(url):
     """True if URL is most likely an HLS stream.
 
@@ -1425,6 +1465,13 @@ def _looks_like_hls(url):
     return '.m3u8' in u or 'pluto.tv/stitch/hls/' in u
 
 
+def _is_pluto_url(url):
+    """True if URL is served from Pluto's CDN.  Used to gate header injection
+    so we don't ship a fake User-Agent on every HLS request — only the ones
+    that need it."""
+    return isinstance(url, str) and 'pluto.tv' in url.lower()
+
+
 def _apply_isa_properties(li, url):
     """Set inputstream.adaptive properties on a ListItem when the URL is HLS.
 
@@ -1435,14 +1482,25 @@ def _apply_isa_properties(li, url):
     Why this exists: Kodi's built-in demuxer can fail on session-bound HLS
     streams, particularly Pluto TV's stitcher (which is what backs WOD's
     live wrestling channels — see live.xml).  ISA's HLS handler is more
-    forgiving with these.  Symptom on the failing path is a log line like
-    'CVideoPlayer::OpenDemuxStream - Error creating demuxer' immediately
-    after the URL is opened.
+    forgiving with these.
+
+    Pluto TV detail: Pluto's edge servers reject non-browser clients with
+    HTTP 403, so for pluto.tv URLs we also set manifest_headers and
+    stream_headers with a Chrome-shaped User-Agent and Referer.  These
+    properties are namespaced under inputstream.adaptive and ignored by
+    other inputstream addons, so they're scoped correctly.
+
+    Note: as of Kodi 21 (Omega), inputstream.adaptive auto-detects manifest
+    type from the response Content-Type / extension.  We previously set
+    `inputstream.adaptive.manifest_type=hls` and Kodi logged a deprecation
+    warning; that property is now omitted.
     """
     if not _looks_like_hls(url):
         return
     li.setProperty('inputstream', 'inputstream.adaptive')
-    li.setProperty('inputstream.adaptive.manifest_type', 'hls')
+    if _is_pluto_url(url):
+        li.setProperty('inputstream.adaptive.manifest_headers', _PLUTO_HEADERS)
+        li.setProperty('inputstream.adaptive.stream_headers',   _PLUTO_HEADERS)
 
 
 def list_static_menu(menu_key, menu_title):
