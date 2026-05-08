@@ -1,8 +1,43 @@
 #!/usr/bin/env python3
 """
-plugin.video.echoondemand — Echo OnDemand  v2.5.0
+plugin.video.echoondemand — Echo OnDemand  v2.6.0
 Kodi Omega (v21) plugin for browsing and playing VOD content (Movies and Series)
-from an Xtream Codes IPTV service, plus Wrestling content via debrid.
+from an Xtream Codes IPTV service, plus three on-demand replay sources via debrid:
+Wrestling Rewind, Wrestling on Demand, and Fights on Demand (UFC/MMA/Boxing).
+
+Changes in 2.6.0 (audit + WOD/FOD integration):
+  - NEW: Wrestling on Demand (WOD) section.  Curated category tree pointing at
+    individual MicroJen XML feeds on l3grthu.com/hades/wod21.  Covers WWE
+    (RAW, SmackDown, NXT, WrestleMania, PPV), other promotions (AEW, TNA,
+    NWA, NJPW, ROH, RPW, Indy), documentaries, interviews, and archive.
+    No live content (deliberately scoped to on-demand).
+  - NEW: Fights on Demand (FOD) section.  UFC PPV, Fight Night, ESPN/ABC/FOX/FUEL,
+    Classic, Shows; MMA; Boxing; plus a Free (No Debrid) sub-menu.  Sources
+    XML feeds from mylostsoulspace.co.uk/FightsOnDemand.
+  - NEW: STATIC_MENUS / list_static_menu() — single mechanism that drives both
+    new sections.  Each leaf is a dir item that hands off to the existing
+    list_wr() / play_wr() flow.  Adding a new section in the future is a
+    pure-data change to STATIC_MENUS, no new view code required.
+  - PARSER: wrestling.py now aliases <summaru> to 'summary' (WOD typo).
+  - PARSER: wrestling.py adds strip_format_tags() utility for cleaning Kodi
+    BBCode-style noise out of WOD/FOD titles for display.
+  - BUG FIX: list_wr now skips item-type entries with empty links (previously
+    only dir-type entries were skipped — items with empty links would appear
+    in the list but show "No playable link" on click).
+  - BUG FIX: list_wr handles the case where a dir-type entry has a list of
+    links (takes the first); previously this would urlencode the list into
+    a broken navigation URL.
+  - IMPROVEMENT: list_wr uses item-level thumbnail/fanart when present, falling
+    back to ADDON_ICON / ADDON_FANART.  Wrestling Rewind feeds rarely populate
+    these fields so the previous code was fine for that source; WOD/FOD feeds
+    are rich in artwork.
+  - IMPROVEMENT: list_wr sets Plot via InfoTagVideo for items with a summary,
+    so the user can press Info and see context.  setContent('files') is
+    unchanged so right-side info panel suppression still works in Aeon Nox Silvo.
+  - IMPROVEMENT: list_wr strips format tags from titles for clean display.
+  - BUG FIX: cache_clear_all() now preserves tmdb_fanart.json.  This cache is
+    independent of the IPTV / wrestling / fights caches and represents many
+    plays of accumulated work.  Was documented as a known limitation in v2.5.0.
 
 Changes in 2.5.0 (audit + bugfix sweep):
   - BUG FIX: list_root() no longer gates on credentials_ok(). Wrestling is
@@ -85,6 +120,8 @@ Routing:
   mode=play_episode ep_id=X   ext=Y        -> play_episode(ep_id, ext)
   mode=wr_list      wr_url=X [wr_title=Y]  -> list_wr(wr_url, wr_title)
   mode=wr_play      wr_item=X              -> play_wr(wr_item)
+  mode=static_menu  key=K  title=T         -> list_static_menu(key, title)
+                                              (drives WOD and FOD curated trees)
   mode=refresh                             -> clear all cache, reload root
 
 Cache strategy (all files in addon profile directory):
@@ -163,6 +200,114 @@ def _resolve_addon_art(filename):
 ADDON_PATH   = _resolve_addon_art('')          # addon root dir, trailing sep
 ADDON_FANART = _resolve_addon_art('fanart.jpg')
 ADDON_ICON   = _resolve_addon_art('icon.png')
+
+
+# ---------------------------------------------------------------------------
+# Wrestling on Demand (WOD) and Fights on Demand (FOD) — static category trees
+# ---------------------------------------------------------------------------
+# Both sources use the same MicroJen XML format that resources/lib/wrestling.py
+# already handles.  Neither has a single master menu XML on the upstream side
+# (WOD's l3grthu.com only serves leaf XMLs; FOD's fodmain-new.xml exists but
+# carries BBCode noise in its labels).  So we curate the menu structure here
+# in pure data and dispatch into the existing list_wr / play_wr flow.
+#
+# Each entry is one of:
+#   {'title': <label>, 'wr_url': <feed XML>, 'icon_label': <bundled icon match>}
+#       Renders as a folder.  Clicking enters list_wr against that XML.
+#       icon_label is matched against bundled PNG names in
+#       resources/images/genres/; missing match → ADDON_ICON.
+#   {'title': <label>, 'menu_key': <STATIC_MENUS key>}
+#       Renders as a folder.  Clicking enters another static menu.
+#
+# Editing this dict is the only change needed to add/remove a feed.
+# No view code or routing changes required.
+
+WOD_BASE = 'https://l3grthu.com/hades/wod21'
+FOD_BASE = 'https://mylostsoulspace.co.uk/FightsOnDemand'
+
+STATIC_MENUS = {
+    # ---------- Wrestling on Demand ----------
+    'wod_root': [
+        {'title': 'WWE',                  'menu_key':   'wod_wwe'},
+        {'title': 'Other Promotions',     'menu_key':   'wod_other'},
+        {'title': 'Documentaries',        'wr_url':     WOD_BASE + '/documentaries/docmain.xml',
+                                          'icon_label': 'Documentary'},
+        {'title': 'Interviews & Kayfabe', 'wr_url':     WOD_BASE + '/kayfabe/main.xml'},
+        {'title': 'Special Matches',      'wr_url':     WOD_BASE + '/specialmatches/specialmatches.xml'},
+        {'title': 'Random Events',        'wr_url':     WOD_BASE + '/latestshows/randomevents.xml'},
+        {'title': 'Movies & TV',          'wr_url':     WOD_BASE + '/mov.xml'},
+        {'title': 'Archive',              'wr_url':     WOD_BASE + '/Archives/archives.xml'},
+    ],
+    'wod_wwe': [
+        {'title': 'RAW',                  'wr_url':     WOD_BASE + '/latestshows/raw.xml',
+                                          'icon_label': 'WWE RAW'},
+        {'title': 'SmackDown',            'wr_url':     WOD_BASE + '/latestshows/smackdown.xml',
+                                          'icon_label': 'WWE SmackDown'},
+        {'title': 'NXT',                  'wr_url':     WOD_BASE + '/latestshows/nxtmain.xml',
+                                          'icon_label': 'NXT'},
+        {'title': 'Latest Shows',         'wr_url':     WOD_BASE + '/latestshows/latestshows.xml'},
+        {'title': 'WrestleMania',         'wr_url':     WOD_BASE + '/wrestlemania/mainwm.xml'},
+        {'title': 'PPV Events',           'wr_url':     WOD_BASE + '/ppv/ppvmain.xml'},
+        {'title': 'WWE YouTube',          'wr_url':     WOD_BASE + '/wweyt.xml'},
+    ],
+    'wod_other': [
+        {'title': 'AEW',                  'wr_url':     WOD_BASE + '/aew/aewppv.xml',
+                                          'icon_label': 'AEW'},
+        {'title': 'TNA / Impact',         'wr_url':     WOD_BASE + '/tna/tnamain.xml'},
+        {'title': 'NWA',                  'wr_url':     WOD_BASE + '/nwa/main.xml'},
+        {'title': 'NJPW',                 'wr_url':     WOD_BASE + '/njpw/njpwmain.xml'},
+        {'title': 'ROH',                  'wr_url':     WOD_BASE + '/roh/main.xml'},
+        {'title': 'RPW',                  'wr_url':     WOD_BASE + '/random/rpw.xml'},
+        {'title': 'Indy Wrestling',       'wr_url':     WOD_BASE + '/indy.xml'},
+    ],
+
+    # ---------- Fights on Demand ----------
+    'fod_root': [
+        {'title': 'Latest UFC / MMA',     'wr_url':     FOD_BASE + '/latestufc-mmaevents.xml',
+                                          'icon_label': 'UFC Replays'},
+        {'title': 'UFC Events',           'menu_key':   'fod_ufc'},
+        {'title': 'MMA Events',           'wr_url':     FOD_BASE + '/mmaevents/mmaeventreplaysmain-new.xml'},
+        {'title': 'Boxing',               'wr_url':     FOD_BASE + '/boxing/boxingreplays-new.xml',
+                                          'icon_label': 'Boxing Replays'},
+        {'title': 'Free (No Debrid)',     'menu_key':   'fod_free'},
+    ],
+    'fod_ufc': [
+        {'title': 'UFC PPV',              'wr_url':     FOD_BASE + '/ufcevents/ufcppv-new.xml',
+                                          'icon_label': 'UFC Replays'},
+        {'title': 'UFC Fight Night',      'wr_url':     FOD_BASE + '/ufcevents/ufcfightnightreplays-new.xml'},
+        {'title': 'UFC on ESPN',          'wr_url':     FOD_BASE + '/ufcevents/ufcfightnightonespn-new.xml'},
+        {'title': 'UFC on ABC',           'wr_url':     FOD_BASE + '/ufcevents/ufconabc-new.xml'},
+        {'title': 'UFC on FOX',           'wr_url':     FOD_BASE + '/ufcevents/ufconfoxtv-new.xml'},
+        {'title': 'UFC on FUEL',          'wr_url':     FOD_BASE + '/ufcevents/ufconfueltv-new.xml'},
+        {'title': 'UFC BJJ',              'wr_url':     FOD_BASE + '/ufcevents/ufcbjj-new.xml'},
+        {'title': 'UFC Shows & Series',   'wr_url':     FOD_BASE + '/ufcshows/ufcshowsmain-new.xml'},
+        {'title': 'Classic UFC PPV',      'wr_url':     FOD_BASE + '/ufcevents/classicufc-new.xml'},
+        {'title': 'Classic UFC Fight Night',
+                                          'wr_url':     FOD_BASE + '/ufcevents/classicfightnight-new.xml'},
+        {'title': 'UFC Events Main',      'wr_url':     FOD_BASE + '/ufcevents/ufceventreplaysmain-new.xml'},
+    ],
+    'fod_free': [
+        {'title': 'Free UFC',             'wr_url':     FOD_BASE + '/nondebridufc.xml'},
+        {'title': 'Free MMA',             'wr_url':     FOD_BASE + '/nondebridmmareplays.xml'},
+        {'title': 'Free Boxing',          'wr_url':     FOD_BASE + '/boxing/boxingreplays-nondebrid.xml',
+                                          'icon_label': 'Boxing Replays'},
+    ],
+}
+
+
+def _menu_icon(label):
+    """
+    Return the bundled icon path for a menu entry's icon_label, or ADDON_ICON
+    if no bundled match exists.  Stays inside resources/images/genres/ —
+    does not consult the optional moviegenreicons resource addon and does not
+    fall back to DefaultGenre.png.  Keeps the WOD/FOD menu look uniform with
+    the rest of Echo OnDemand.
+    """
+    if not label:
+        return ADDON_ICON
+    bundled = os.path.join(ADDON_PATH, 'resources', 'images', 'genres',
+                           '{}.png'.format(label.strip()))
+    return bundled if os.path.exists(bundled) else ADDON_ICON
 
 
 # ---------------------------------------------------------------------------
@@ -271,8 +416,18 @@ def cache_save(key, payload):
 
 
 def cache_clear_all():
+    """
+    Delete all *.json cache files in the profile dir.
+
+    EXCEPTION: tmdb_fanart.json is preserved.  It accumulates over many movie
+    plays (one TMDB lookup per unique movie name|year), and is independent of
+    the IPTV / wrestling / fights caches that users actually want to clear.
+    There's a separate path to wipe it deliberately if ever needed.
+    """
     pattern = os.path.join(_profile_dir(), '*.json')
     for path in glob.glob(pattern):
+        if os.path.basename(path) == 'tmdb_fanart.json':
+            continue
         try:
             os.remove(path)
             log('Deleted cache: {}'.format(os.path.basename(path)))
@@ -752,6 +907,9 @@ def list_root(update_listing=False):
     li.setArt({'icon': ADDON_ICON, 'thumb': ADDON_ICON, 'fanart': ADDON_FANART})
     xbmcplugin.addDirectoryItem(HANDLE, build_url(mode='series_cats'), li, isFolder=True)
 
+    # Wrestling Rewind — single feed URL drives the whole tree.
+    # Soft-coded: settings 'wr_root_url' overrides the default if present
+    # (see HANDOFF.md re: pointing at a mirror without a code change).
     wr_root = ADDON.getSetting('wr_root_url').strip()
     if not wr_root:
         wr_root = 'https://mylostsoulspace.co.uk/WrestlingRewind/xmls/wrestlingrewind-main.xml'
@@ -759,6 +917,26 @@ def list_root(update_listing=False):
     li.setArt({'icon': ADDON_ICON, 'thumb': ADDON_ICON, 'fanart': ADDON_FANART})
     xbmcplugin.addDirectoryItem(
         HANDLE, build_url(mode='wr_list', wr_url=wr_root, wr_title='Wrestling'),
+        li, isFolder=True
+    )
+
+    # Wrestling on Demand — curated tree from STATIC_MENUS['wod_root'].
+    # WWE / Other Promotions / Documentaries / etc.  No live content.
+    li = xbmcgui.ListItem(label='Wrestling on Demand', offscreen=True)
+    li.setArt({'icon': ADDON_ICON, 'thumb': ADDON_ICON, 'fanart': ADDON_FANART})
+    xbmcplugin.addDirectoryItem(
+        HANDLE,
+        build_url(mode='static_menu', key='wod_root', title='Wrestling on Demand'),
+        li, isFolder=True
+    )
+
+    # Fights on Demand — curated tree from STATIC_MENUS['fod_root'].
+    # UFC / MMA / Boxing, including a Free (No Debrid) sub-menu.
+    li = xbmcgui.ListItem(label='Fights on Demand', offscreen=True)
+    li.setArt({'icon': ADDON_ICON, 'thumb': ADDON_ICON, 'fanart': ADDON_FANART})
+    xbmcplugin.addDirectoryItem(
+        HANDLE,
+        build_url(mode='static_menu', key='fod_root', title='Fights on Demand'),
         li, isFolder=True
     )
 
@@ -1114,29 +1292,98 @@ def list_episodes(series_id, season_num):
 
 
 # ---------------------------------------------------------------------------
-# Wrestling Rewind views
+# MicroJen feed views — Wrestling Rewind, Wrestling on Demand, Fights on Demand
 # ---------------------------------------------------------------------------
-# These functions handle navigation of MicroJen XML/JSON feeds from the
-# Wrestling Rewind service.  All feed fetching, parsing, and link resolution
-# is delegated to resources/lib/wrestling.py (pure data layer).
+# All three sources use the same MicroJen XML/JSON format.  list_wr() and
+# play_wr() are source-agnostic — they just walk whatever feed URL is handed
+# to them.  list_static_menu() handles the curated WOD/FOD category trees
+# defined in STATIC_MENUS at the top of this file.
 #
-# list_wr() and play_wr() follow exactly the same patterns as the rest of
-# this file: profile-dir caching, error dialogs, setContent, _apply_buffer.
+# Feed fetching, parsing, and link resolution are delegated to
+# resources/lib/wrestling.py (pure data layer).
+#
+# All views follow the same patterns as the rest of this file: profile-dir
+# caching, error dialogs, setContent('files'), _apply_buffer at play time.
 
 
 def _wr_ttl():
-    """WR feed cache TTL — fixed at 30 minutes."""
+    """MicroJen feed cache TTL — fixed at 30 minutes for all three sources."""
     return 1800
+
+
+def list_static_menu(menu_key, menu_title):
+    """
+    Render a hardcoded category tree from STATIC_MENUS.
+
+    Each entry is rendered as a folder.  Two kinds of entries:
+      * 'wr_url' present  → folder routes into list_wr against that feed XML.
+      * 'menu_key' present → folder routes into another static menu.
+
+    No network I/O, no caching — STATIC_MENUS is plain Python data.
+
+    setContent('files') matches list_wr below; the skin's right-side info
+    panel stays suppressed in Aeon Nox Silvo for a uniform Wrestling/Fights
+    look-and-feel.
+    """
+    entries = STATIC_MENUS.get(menu_key)
+    if not entries:
+        log('list_static_menu: unknown menu key "{}"'.format(menu_key),
+            xbmc.LOGWARNING)
+        xbmcgui.Dialog().notification(
+            'Echo OnDemand', 'Menu not found.', time=3000
+        )
+        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
+        return
+
+    xbmcplugin.setPluginCategory(HANDLE, 'Echo OnDemand \u2014 {}'.format(menu_title))
+    xbmcplugin.setContent(HANDLE, 'files')
+
+    for entry in entries:
+        title     = entry.get('title', 'Unknown')
+        icon_path = _menu_icon(entry.get('icon_label', ''))
+
+        li = xbmcgui.ListItem(label=title, offscreen=True)
+        li.setArt({'thumb': icon_path, 'icon': icon_path, 'fanart': ADDON_FANART})
+
+        if 'wr_url' in entry:
+            # Leaf — drills into list_wr against the feed XML.
+            target_url = build_url(
+                mode='wr_list', wr_url=entry['wr_url'], wr_title=title
+            )
+        elif 'menu_key' in entry:
+            # Branch — drills into another static menu.
+            target_url = build_url(
+                mode='static_menu', key=entry['menu_key'], title=title
+            )
+        else:
+            # Malformed entry — skip rather than break the whole listing.
+            log('list_static_menu: entry "{}" has neither wr_url nor menu_key'
+                .format(title), xbmc.LOGWARNING)
+            continue
+
+        xbmcplugin.addDirectoryItem(HANDLE, target_url, li, isFolder=True)
+
+    xbmcplugin.endOfDirectory(HANDLE)
 
 
 def list_wr(wr_url, wr_title='Wrestling'):
     """
-    Fetch and display one level of a Wrestling MicroJen feed.
+    Fetch and display one level of a MicroJen feed (Wrestling Rewind, WOD, FOD).
 
     Folders (type=dir) route back to list_wr with the sub-feed URL.
     Playable items (type=item) route to play_wr with the item encoded as
     base64 JSON — handles list-typed link fields (sublinks) cleanly in a
     single URL parameter.
+
+    v2.6.0 enhancements vs 2.5.0:
+      - item-type entries with empty links are now skipped (previously listed
+        but unplayable on click)
+      - dir-type entries with list-typed links use the first list element
+        (was urlencoding the list into a broken navigation URL)
+      - item-level thumbnail/fanart used when present (was always ADDON_ICON)
+      - title format tags stripped for clean display (handles WOD/FOD BBCode)
+      - Plot infotag set when item has a summary (Info popup works; right
+        panel suppression unchanged because it depends on setContent('files'))
     """
     profile = _profile_dir()
     ttl     = _wr_ttl()
@@ -1147,7 +1394,9 @@ def list_wr(wr_url, wr_title='Wrestling'):
             text = _wr.fetch_feed(wr_url)
             _wr.cache_save(profile, wr_url, text)
         except Exception as e:
-            xbmcgui.Dialog().ok('Echo OnDemand', 'Error loading Wrestling feed:\n{}'.format(e))
+            xbmcgui.Dialog().ok(
+                'Echo OnDemand', 'Error loading feed:\n{}'.format(e)
+            )
             xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
             return
 
@@ -1165,22 +1414,49 @@ def list_wr(wr_url, wr_title='Wrestling'):
 
     for item in items:
         item_type = item.get('type', 'item')
-        title     = item.get('title', 'Unknown').strip()
+        raw_title = item.get('title', 'Unknown')
+        # Strip BBCode-style format tags ([COLOR ...], [B], [I], etc.) that
+        # WOD / FOD sometimes embed.  Wrestling Rewind titles pass through
+        # unchanged because they don't use these tags.
+        title     = _wr.strip_format_tags(raw_title) or 'Unknown'
         raw_link  = item.get('link', '')
 
-        # Skip directory entries with no link — they would navigate to a broken URL.
-        if item_type == 'dir' and not raw_link:
-            log('list_wr: skipping dir item "{}" with empty link'.format(title),
-                xbmc.LOGWARNING)
+        # Skip ANY entry with an empty link — for dir items they'd navigate
+        # to a broken URL, for item-type they'd hit "No playable link" on click.
+        if not raw_link:
+            log('list_wr: skipping {} item "{}" with empty link'.format(
+                item_type, title), xbmc.LOGWARNING)
             continue
 
+        # Pick item-level art when present, addon defaults otherwise.
+        thumb_url  = (item.get('thumbnail') or '').strip() or ADDON_ICON
+        fanart_url = (item.get('fanart')    or '').strip() or ADDON_FANART
+        summary    = (item.get('summary')   or '').strip()
+
         li = xbmcgui.ListItem(label=title, offscreen=True)
-        li.setArt({'thumb': ADDON_ICON, 'icon': ADDON_ICON, 'fanart': ADDON_FANART})
+        li.setArt({'thumb': thumb_url, 'icon': thumb_url, 'fanart': fanart_url})
 
         if item_type == 'dir':
-            target_url = build_url(mode='wr_list', wr_url=raw_link, wr_title=title)
+            # A dir's link is normally a single feed-XML URL.  If the parser
+            # produced a list (rare but possible per the schema), take the
+            # first element rather than letting urlencode mangle the list.
+            dir_link = raw_link[0] if isinstance(raw_link, list) and raw_link else raw_link
+            if not isinstance(dir_link, str) or not dir_link:
+                log('list_wr: dir "{}" has unusable link, skipping'.format(title),
+                    xbmc.LOGWARNING)
+                continue
+            target_url = build_url(mode='wr_list', wr_url=dir_link, wr_title=title)
             xbmcplugin.addDirectoryItem(HANDLE, target_url, li, isFolder=True)
         else:
+            # Playable item.  If a summary is present, expose it through
+            # InfoTagVideo so pressing Info shows context.  setContent('files')
+            # is unchanged so Aeon Nox Silvo still suppresses the right panel.
+            if summary:
+                tag = li.getVideoInfoTag()
+                tag.setMediaType('video')
+                tag.setTitle(title)
+                tag.setPlot(summary)
+
             payload = {
                 'title': title,
                 'link':  raw_link,
@@ -1268,6 +1544,9 @@ def router(paramstring):
     wr_url    = params.get('wr_url', '')
     wr_title  = params.get('wr_title', 'Wrestling')
     wr_item   = params.get('wr_item', '')
+    # Static menu params (WOD/FOD curated trees).
+    menu_key   = params.get('key', '')
+    menu_title = params.get('title', '')
 
     if mode == 'movie_cats':
         list_movie_categories()
@@ -1289,6 +1568,8 @@ def router(paramstring):
         list_wr(wr_url, wr_title)
     elif mode == 'wr_play':
         play_wr(wr_item)
+    elif mode == 'static_menu':
+        list_static_menu(menu_key, menu_title)
     elif mode == 'refresh':
         do_refresh()
     else:

@@ -1,11 +1,27 @@
 """
 resources/lib/wrestling.py
-Wrestling Rewind data layer for Echo OnDemand  v2.2.0
+MicroJen feed data layer for Echo OnDemand  v2.6.0
+
+Originally written for Wrestling Rewind (mylostsoulspace.co.uk).  In v2.6.0
+the same module is used for two additional sources that share the format:
+  - Wrestling on Demand (WOD)        — l3grthu.com/hades/wod21/...
+  - Fights on Demand (FOD)           — mylostsoulspace.co.uk/FightsOnDemand/...
+This module is source-agnostic; default.py drives which feed URL is fetched.
 
 Responsibilities (data only — no Kodi UI, no xbmcplugin, no xbmcgui):
   - Fetch MicroJen XML/JSON feeds over HTTP with cache
   - Parse them into normalised item dicts
   - Resolve candidate links to a playable URL via resolveurl (debrid-first)
+  - Provide small text-utility helpers used by the UI layer
+
+v2.6.0 changes (data-layer audit pass):
+  - _parse_element: alias <summaru> tag → 'summary' field.  Some WOD feeds use
+    this misspelling deliberately and the previous code stored it as
+    item['summaru'], invisible to the UI.
+  - parse_json: same alias for a 'summaru' JSON key.
+  - strip_format_tags(): new utility for cleaning Kodi BBCode-style noise
+    ([COLOR ...], [B], [I], [CR], etc., including malformed variants) from
+    titles for display.  Pure text utility; the parser keeps raw text intact.
 
 Parsed item dict schema:
   {
@@ -138,6 +154,49 @@ def fetch_feed(url):
 
 
 # ---------------------------------------------------------------------------
+# Text utilities (UI-facing — exported)
+# ---------------------------------------------------------------------------
+# strip_format_tags() is the only function in this file the UI layer calls
+# besides the parse / fetch / resolve trio.  Kept here next to other text
+# helpers so all string-cleaning logic lives in one place.
+
+# Match a complete [COLOR ...] open tag and tolerate both well-formed and
+# malformed variants seen in WOD feeds:
+#   [COLOR white]      — well-formed, leading space
+#   [COLOR  snow ]     — multiple/trailing whitespace
+#   [COLORwhite]       — no space (renders literally in Kodi)
+#   [COLOR #FF00FF]    — hex colour form
+# The character class deliberately excludes [ and ] so the match stops at
+# the first closing bracket and never consumes a following tag.
+_FMT_COLOR_OPEN_RE  = re.compile(r'\[COLOR[A-Za-z0-9# \t]*\]', re.IGNORECASE)
+_FMT_COLOR_CLOSE_RE = re.compile(r'\[/COLOR\]', re.IGNORECASE)
+
+# Standalone BBCode-style format tags Kodi may render (or may not, depending
+# on the skin / context).  Stripped unconditionally for consistent display.
+_FMT_BBCODE_RE = re.compile(r'\[/?(?:B|I|UPPERCASE|LOWERCASE|CR)\]',
+                            re.IGNORECASE)
+
+
+def strip_format_tags(text):
+    """
+    Remove Kodi BBCode-style format tags ([COLOR ...], [B], [I], [CR], etc.)
+    from `text` for clean display.  Tolerates malformed variants found in
+    real WOD/FOD feeds (e.g. '[COLORwhite]' with no space).
+
+    Pure text utility — does not know about Kodi.  The XML/JSON parsers keep
+    raw text intact; the UI layer (default.py) calls this when rendering.
+    """
+    if not text:
+        return ''
+    text = _FMT_COLOR_OPEN_RE.sub('', text)
+    text = _FMT_COLOR_CLOSE_RE.sub('', text)
+    text = _FMT_BBCODE_RE.sub('', text)
+    # Collapse any whitespace runs left behind by tag removal.
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
+
+
+# ---------------------------------------------------------------------------
 # XML parsing
 # ---------------------------------------------------------------------------
 
@@ -215,6 +274,10 @@ def _parse_element(element):
             if text:
                 sublinks.append(text)
         else:
+            # WOD typo alias: <summaru> means <summary>.  Map at parse time so
+            # the UI doesn't need to know about the misspelling.
+            if tag == 'summaru':
+                tag = 'summary'
             result[tag] = text
 
     # Pass 2: recursive subtree scan (handles sublinks-inside-link structure)
@@ -386,13 +449,18 @@ def parse_json(text):
     for raw in raw_items:
         if not isinstance(raw, dict):
             continue
+        # WOD typo alias: 'summaru' JSON key means 'summary'.  We accept either,
+        # preferring 'summary' if both are present (consistent with XML pass).
+        summary_value = raw.get('summary')
+        if summary_value is None:
+            summary_value = raw.get('summaru', '')
         item = {
             'type':      (raw.get('type') or 'item').lower(),
             'title':     (raw.get('title') or '').strip(),
             'link':      raw.get('link', ''),
             'thumbnail': (raw.get('thumbnail') or '').strip(),
             'fanart':    (raw.get('fanart') or '').strip(),
-            'summary':   (raw.get('summary') or '').strip(),
+            'summary':   (summary_value or '').strip(),
         }
         items.append(item)
 
