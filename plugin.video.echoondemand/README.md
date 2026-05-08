@@ -1,6 +1,6 @@
 # Echo OnDemand — Kodi Video Plugin
 
-**Version:** 3.0.0
+**Version:** 3.1.0
 **Platform:** Kodi Omega (v21) — Windows, Linux, macOS, Android
 **Developer:** Echo-Storm
 
@@ -15,7 +15,7 @@ Echo OnDemand is a private Kodi addon that provides access to six content source
 - **Wrestling Rewind** — Wrestling Rewind replays and PPV events via debrid
 - **Wrestling on Demand** — WWE (RAW, SmackDown, NXT, WrestleMania, PPV), AEW, TNA, NWA, NJPW, ROH, RPW, Indy, plus documentaries, interviews, special matches, archive
 - **Fights on Demand** — UFC (PPV, Fight Night, ESPN/ABC/FOX/FUEL, Classic, Shows), MMA, Boxing, including a Free / No Debrid sub-menu
-- **Live** — Live Wrestling (24/7 channels). Parent menu in place for future live-fight feeds.
+- **Live** — Live Wrestling (24/7 channels from WOD's `live.xml`) and Sports Streams (curated Pluto TV themed sports channels: Golf Central, F1, UFC, Bellator, ONE, Top Rank Classics, DAZN Ringside)
 
 Plus three menu actions: **Backup Settings**, **Restore Settings**, and **Refresh / Clear Cache**.
 
@@ -42,7 +42,7 @@ The replay and live sections are accessible without IPTV credentials. Movies and
 Install as a zip file via Kodi's Add-on Manager:
 
 1. Settings → Add-ons → Install from zip file
-2. Select `plugin_video_echoondemand-3_0_0.zip`
+2. Select `plugin_video_echoondemand-3_1_0.zip`
 3. Open the addon and enter your Xtream Codes username and password in Settings
 
 Ensure `script.module.resolveurl` is already installed before enabling the addon.
@@ -66,6 +66,7 @@ If you've ever lost settings between versions, that's why. v3.0.0 adds a **Backu
 | Password | Xtream Codes password |
 | Pre-buffer seconds | Seconds to pause before playback begins (0 = disabled). Gives Kodi's buffer time to fill before the first frame. |
 | TMDB API key | Optional. When present, fetches and caches movie backdrops after each play. Free key from themoviedb.org. |
+| Use Pluto TV resolver | Default on. Resolves Pluto channels with a fresh session at play time. Turn off only if Pluto changes their boot API and the resolver starts failing — the addon will fall back to the original (potentially stale) URLs from the upstream feed. |
 
 No source-specific settings are exposed. Feed root URLs are hardcoded in `default.py` (one constant per source). The Wrestling Rewind root URL can be overridden via a `wr_root_url` setting if added to settings.xml manually; WOD, FOD, and Live roots are static category trees defined in `STATIC_MENUS` near the top of `default.py`.
 
@@ -106,9 +107,16 @@ Content comes from MicroJen XML feeds at `mylostsoulspace.co.uk/FightsOnDemand/`
 
 The Free sub-menu points at the upstream's nondebrid feeds for users without a debrid account.
 
-### Live (new in 3.0.0)
+### Live (expanded in 3.1.0)
 
-Currently single-source. Live Wrestling pulls from WOD's `live.xml` (24/7 wrestling channels). The parent menu (`STATIC_MENUS['live_root']`) is in place so future live-fight feeds can be added with a one-entry edit. FOD is a replay-only service upstream and Wrestling Rewind has no live content.
+Two sub-categories:
+
+- **Live Wrestling** — walks WOD's `live.xml` feed (24/7 wrestling channels). Channels are dynamic; the upstream service adds and removes them.
+- **Sports Streams** — curated list of Pluto TV themed sports channels (Golf Central, F1, UFC, Bellator MMA, ONE Championship, Top Rank Classics, DAZN Ringside). The list lives in `STATIC_MENUS['live_sports']` in `default.py` — adding a channel is a one-line edit (find the channel ID in the URL bar of `pluto.tv/us/live-tv/<id>` and add an entry).
+
+Both sub-categories resolve through `resources/lib/pluto.py`, which fetches a fresh session from `boot.pluto.tv` at play time. This sidesteps the stale-session-token issue that previously caused some channels in WOD's `live.xml` to play "service no longer available" videos instead of the actual channel — those videos came from regional Pluto retirement notices triggered by tokens that had been minted in regions Pluto has since pulled out of. By minting our own session from the user's actual region, we get the live channel every time the channel is available in that region.
+
+If a Pluto channel still fails to play in 3.1.0+, it's almost always because the channel itself isn't available in your region — Pluto geo-locks some content. Same channel ID may work for one user and not another.
 
 ### Link resolution (all replay and live sources)
 
@@ -286,8 +294,14 @@ Intentional in v2.6.0+. The TMDB cache (`tmdb_fanart.json`) is preserved across 
 **A live channel fails to play with "Error creating demuxer" in the Kodi log**
 Some live channels are HLS streams served by Pluto TV's stitcher (or other HLS sources) — Kodi's built-in demuxer can fail on these. v3.0.1+ hands HLS URLs to `inputstream.adaptive` automatically, which handles them more reliably. If it still fails: confirm `inputstream.adaptive` is installed and enabled (Add-ons → My add-ons → VideoPlayer InputStream → InputStream Adaptive).
 
+**A Pluto TV channel plays a "service no longer available" video instead of the live channel**
+This was the dominant failure mode in v3.0.x — stale session tokens baked into WOD's upstream `live.xml` feed pointed at regional Pluto retirement notices. v3.1.0 fixes this by minting fresh session tokens at play time via Pluto's boot endpoint. If you still see a retirement notice on v3.1.0+, the channel itself has been pulled in your region — Pluto geo-locks some content per-channel.
+
 **A Pluto TV live channel fails with "HTTP error 403" from inputstream.adaptive**
-Pluto's edge servers reject requests that don't look like a web browser. v3.0.2+ injects a Chrome-shaped User-Agent and a `pluto.tv` Referer for any URL containing `pluto.tv` to clear this. If a Pluto channel still 403s on v3.0.2+, the most likely cause is a stale session token (`sid`/`deviceId`) in the upstream feed — those are baked into `live.xml` and are out of our control. Try other channels in the same Live Wrestling list; if all fail simultaneously, the upstream feed needs refreshing.
+v3.0.2+ injects a Chrome-shaped User-Agent and a `pluto.tv` Referer for any URL containing `pluto.tv` to clear this. If a Pluto channel still 403s on v3.1.0+, run "Refresh / Clear Cache" — the in-memory Pluto session may have aged out unusually. If that doesn't help, check the Kodi log for `pluto:` lines around the time of the failure.
+
+**The Pluto resolver itself is misbehaving**
+You can disable it in Settings → "Use Pluto TV resolver". When off, the addon falls back to playing whatever stitcher URL was in the upstream feed (the v3.0.2 behaviour). Use this as a temporary workaround only — you'll lose access to the curated Sports Streams channels entirely, and live wrestling becomes hit-or-miss again. Re-enable as soon as the underlying issue is resolved.
 
 **Lost settings after reinstalling the addon**
 Use the Backup Settings entry before uninstalling, and Restore Settings after reinstalling. See "Upgrading from a previous version" above for prevention. Backup file lives at `<KODI_HOME>/userdata/echoondemand_settings.json`.

@@ -1,10 +1,83 @@
 #!/usr/bin/env python3
 """
-plugin.video.echoondemand — Echo OnDemand  v3.0.2
+plugin.video.echoondemand — Echo OnDemand  v3.1.1
 Kodi Omega (v21) plugin for browsing and playing VOD content (Movies and Series)
 from an Xtream Codes IPTV service, plus three on-demand replay sources via debrid
 (Wrestling Rewind, Wrestling on Demand, Fights on Demand) and a Live category
-(currently Live Wrestling — extensible).
+(Live Wrestling — WOD's live.xml feed; Sports Streams — curated Pluto TV
+themed channels for golf, F1, UFC, MMA, boxing).
+
+Changes in 3.1.1 (Pluto resolver fix — match browser exactly + diagnostics):
+  - REWRITE: pluto.py now matches the Pluto web app's actual API usage,
+    captured from a real Edge 147 browser request to boot.pluto.tv:
+      * Param name change: channelID → channelSlug (we pass the channel ID
+        as the value).  This is the critical fix — without channelSlug set,
+        Pluto's boot endpoint returns a default/restricted response that
+        doesn't include the user's regional channels.
+      * appVersion bumped to current ('9.21.0-...')
+      * deviceMake fixed: was 'firefox', now 'edge-chromium' (matches UA)
+      * deviceVersion bumped to '147.0.0'
+      * Added appLaunchCount and lastAppLaunchDate params
+      * Removed the unused 'constraints' param the browser doesn't send
+    Together these change the boot request from a guess-shape catalog fetch
+    into a per-channel session mint, which is what the web player actually
+    does and what Pluto's region-detection logic expects.
+  - REWRITE: Boot is now per-channel rather than once-per-session.  Each
+    channel ID gets its own cache entry (still 30-min TTL).  Network cost
+    is one extra fetch per cold channel, paid once per 30 minutes.
+  - HEADERS: Added Origin, Accept, Accept-Language, sec-ch-ua-*, sec-fetch-*,
+    DNT — matching the browser's full header set so Pluto's edge filtering
+    sees us as a real Edge tab rather than a bare Python urllib client.
+  - UA: Bumped to Edge 147 / Chrome 147 with the Edg/147.0.0.0 suffix.
+    This single constant (pluto.BROWSER_UA) is now used for both the boot
+    request and the inputstream.adaptive stream/manifest headers, so
+    everything Pluto sees from us has the same client identity.
+  - DIAGNOSTIC: pluto.py now logs (via a callback bridge into xbmc.log)
+    detailed info on resolver failure: top-level keys of the boot response,
+    length of channels[] / EPG[] / channel arrays, a 400-char snippet of
+    the response body, and the first channel entry's keys.  This lets us
+    debug shape changes from the Kodi log without modifying code.
+  - PARSE: Multi-shape response parsing — checks channels[] (current
+    expected shape), EPG[] (some boot variants), and channel singular
+    (likely shape for per-channel boot).  First match wins.
+
+Changes in 3.1.0 (Pluto TV resolver + Sports Streams):
+  - NEW: resources/lib/pluto.py — fetches a fresh session from boot.pluto.tv
+    at play time and resolves channel IDs to current HLS manifest URLs.
+    This fixes the WOD live.xml regional-retirement issue: stale session
+    tokens baked into the upstream feed pointed some Pluto channels at
+    "service no longer available" videos.  By minting our own session
+    (matching the user's actual region) we get the live channel instead.
+  - NEW: STATIC_MENUS['live_root'] now has two entries — 'Live Wrestling'
+    (existing, walks WOD's live.xml) and 'Sports Streams' (new, curated
+    list of seven Pluto TV themed sports channels: Golf Central, F1, UFC,
+    Bellator, ONE, Top Rank Classics, DAZN Ringside).  Both routes
+    resolve through pluto.py.
+  - NEW: list_static_menu now supports a third entry kind: 'channel_id'
+    entries become playable items routing to play_pluto.  This is what
+    Sports Streams uses.  Existing 'wr_url' (folder → list_wr) and
+    'menu_key' (folder → another static menu) entry kinds are unchanged.
+  - NEW: play_pluto view — resolves a channel ID to a fresh URL via
+    pluto.get_fresh_url, applies inputstream.adaptive properties (with the
+    Pluto headers from v3.0.2), and plays.  Used by Sports Streams.
+  - NEW: Setting `pluto_resolver_enabled` (bool, default true) — kill
+    switch for the Pluto resolver.  If Pluto changes their boot API and
+    the resolver breaks, the user can disable it without rolling back the
+    addon.  When disabled, play_wr falls back to the original stitcher
+    URL (current 3.0.2 behaviour) and play_pluto returns an error.
+  - PIPELINE: play_wr now silently routes Pluto URLs through the new
+    resolver before handing them to ISA.  Non-Pluto URLs (WWE Network
+    CloudFront, debrid resolutions, etc.) are unchanged.  Resolver
+    failure falls back to the original URL — worst case is identical to
+    v3.0.2 behaviour.
+  - CACHE: cache_clear_all now also wipes pluto.py's in-memory session
+    cache.  "Refresh / Clear Cache" forces a fresh boot fetch on the
+    next play.
+  - ICONS: 6 new template-style PNGs in resources/images/genres/ for
+    the Sports Streams entries (GOLF, F1, UFC, BELLATOR, ONE, BOXING).
+    UFC and Boxing intentionally use new minimal-label icons rather than
+    the existing 'UFC Replays' / 'Boxing Replays' icons — the new ones
+    label the channel, not the action.
 
 Changes in 3.0.2 (Pluto TV header fix + ISA cleanup):
   - FIX: Pluto TV channels (TNA WRESTLING 24/7, LUCHA LIBRE AAA 24/7, and
@@ -180,6 +253,8 @@ Routing:
   mode=wr_play      wr_item=X              -> play_wr(wr_item)
   mode=static_menu  key=K  title=T         -> list_static_menu(key, title)
                                               (drives WOD, FOD, and Live trees)
+  mode=play_pluto   channel_id=C  title=T  -> play_pluto(channel_id, title)
+                                              (Sports Streams entries)
   mode=settings_backup                      -> do_settings_backup()
   mode=settings_restore                     -> do_settings_restore()
   mode=refresh                             -> clear all cache, reload root
@@ -221,6 +296,7 @@ import xbmcaddon
 import xbmcvfs
 
 from resources.lib import wrestling as _wr
+from resources.lib import pluto     as _pluto
 
 # ---------------------------------------------------------------------------
 # Bootstrap
@@ -366,14 +442,40 @@ STATIC_MENUS = {
     ],
 
     # ---------- Live ----------
-    # Live category — currently single-source (WOD's 24/7 wrestling channels).
-    # FOD is a replay service upstream and has no live feed.  Wrestling Rewind
-    # is also replay-only.  This sub-menu structure is in place so future live
-    # sources are a one-entry edit away rather than a code change.
+    # Two sub-categories: 'Live Wrestling' walks WOD's live.xml feed (which
+    # has its own dynamic channel list maintained upstream), and 'Sports
+    # Streams' walks our curated list of Pluto TV themed sports channels.
+    # Both ultimately resolve through pluto.py — wrestling channels are
+    # routed there transparently in play_wr, and Sports Streams entries
+    # use the dedicated play_pluto view by channel ID.
     'live_root': [
         {'title': 'Live Wrestling',       'wr_url':     WOD_BASE + '/live.xml',
                                           'icon_label': 'Live Wrestling'},
-        # Future: add Live Fights / Live Sports here when upstream feeds appear.
+        {'title': 'Sports Streams',       'menu_key':   'live_sports',
+                                          'icon_label': 'Live'},
+    ],
+
+    # ---------- Sports Streams (Pluto TV channels, curated) ----------
+    # 24/7 themed sports channels.  Each entry is rendered by list_static_menu
+    # but with a 'channel_id' field that triggers the play_pluto branch
+    # instead of a sub-menu navigation.  Adding a channel is a one-line
+    # edit — find the channel ID in the pluto.tv URL bar (the 24-char hex
+    # in /us/live-tv/<id>) and add an entry below.
+    'live_sports': [
+        {'title': 'Golf Central',         'channel_id': '65493029ab052400089e9d2f',
+                                          'icon_label': 'Golf'},
+        {'title': 'F1 Channel',           'channel_id': '65c69ee3d77d450008c80438',
+                                          'icon_label': 'F1'},
+        {'title': 'UFC',                  'channel_id': '677d9adfa9a51b0008497fa0',
+                                          'icon_label': 'UFC'},
+        {'title': 'Bellator MMA',         'channel_id': '5ebc8688f3697d00072f7cf8',
+                                          'icon_label': 'Bellator'},
+        {'title': 'ONE Championship',     'channel_id': '668c5d3bfd9eb2000882bb50',
+                                          'icon_label': 'ONE'},
+        {'title': 'Top Rank Classics',    'channel_id': '64d160f53c785e0008df525e',
+                                          'icon_label': 'Boxing'},
+        {'title': 'DAZN Ringside',        'channel_id': '649b6898f2ec0000081a9460',
+                                          'icon_label': 'Boxing'},
     ],
 }
 
@@ -516,6 +618,10 @@ def cache_clear_all():
             log('Deleted cache: {}'.format(os.path.basename(path)))
         except Exception as e:
             log('Could not delete {}: {}'.format(path, e), xbmc.LOGWARNING)
+    # Wipe the in-memory Pluto session cache too — next play_pluto / play_wr
+    # against a Pluto channel will fetch a fresh boot response.
+    _pluto.clear_session_cache()
+    log('Pluto session cache cleared')
 
 
 # ---------------------------------------------------------------------------
@@ -1432,24 +1538,37 @@ def _wr_ttl():
 # ---------------------------------------------------------------------------
 # Pluto's edge servers (cfd-v4-service-channel-stitcher-*.prd.pluto.tv) check
 # the request's User-Agent and return HTTP 403 for clients that don't look
-# like a web browser.  Setting a Chrome-shaped UA and a pluto.tv Referer via
-# inputstream.adaptive's header properties is enough to clear that.
+# like a web browser.  Setting the same browser UA + pluto.tv Referer via
+# inputstream.adaptive's header properties as we use for the boot call
+# clears that filtering for the actual stream segments too.
 #
-# This affects WOD's live wrestling channels — most of them stream from
-# Pluto.  Without these headers, ISA fetches the manifest and gets 403'd
-# back (visible in the Kodi log as "Download failed, HTTP error 403"
-# from inputstream.adaptive).  Non-Pluto HLS streams (e.g., the WWE
-# Network CloudFront feed) work without any of this and are left alone.
+# This affects WOD's live wrestling channels and Sports Streams — most stream
+# from Pluto.  Without these headers, ISA fetches the manifest and gets 403'd
+# back ("Download failed, HTTP error 403" from inputstream.adaptive in the
+# log).  Non-Pluto HLS streams (e.g., the WWE Network CloudFront feed) work
+# without any of this and are left alone.
+#
+# The User-Agent constant lives in pluto.py and is imported here so both
+# the boot session and the playback session present the same client identity.
 
-_BROWSER_UA = (
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-    'AppleWebKit/537.36 (KHTML, like Gecko) '
-    'Chrome/120.0.0.0 Safari/537.36'
-)
 _PLUTO_HEADERS = urlencode({
-    'User-Agent': _BROWSER_UA,
+    'User-Agent': _pluto.BROWSER_UA,
     'Referer':    'https://pluto.tv/',
-}, quote_via=quote)   # %20 for spaces, not '+' — Python docs recommend quote for HTTP headers
+}, quote_via=quote)   # %20 for spaces, not '+' — quote is correct for HTTP headers
+
+
+# Wire pluto.py's diagnostic logging into Kodi's log.  pluto.py uses string
+# levels ('INFO', 'WARN', 'ERROR') so it can stay free of Kodi imports;
+# we translate to xbmc.LOG* here.  This call runs once at module import time.
+def _bridge_pluto_logger(msg, level='INFO'):
+    levelmap = {
+        'INFO':  xbmc.LOGINFO,
+        'WARN':  xbmc.LOGWARNING,
+        'ERROR': xbmc.LOGERROR,
+    }
+    log(msg, levelmap.get(level, xbmc.LOGINFO))
+
+_pluto.set_logger(_bridge_pluto_logger)
 
 
 def _looks_like_hls(url):
@@ -1507,15 +1626,15 @@ def list_static_menu(menu_key, menu_title):
     """
     Render a hardcoded category tree from STATIC_MENUS.
 
-    Each entry is rendered as a folder.  Two kinds of entries:
-      * 'wr_url' present  → folder routes into list_wr against that feed XML.
-      * 'menu_key' present → folder routes into another static menu.
+    Each entry is rendered as either a folder or a playable item:
+      * 'wr_url' present     → folder, routes into list_wr against feed XML.
+      * 'menu_key' present   → folder, routes into another static menu.
+      * 'channel_id' present → playable item, routes to play_pluto with that ID.
 
     No network I/O, no caching — STATIC_MENUS is plain Python data.
 
     setContent('files') matches list_wr below; the skin's right-side info
-    panel stays suppressed in Aeon Nox Silvo for a uniform Wrestling/Fights
-    look-and-feel.
+    panel stays suppressed in Aeon Nox Silvo for a uniform look-and-feel.
     """
     entries = STATIC_MENUS.get(menu_key)
     if not entries:
@@ -1542,18 +1661,27 @@ def list_static_menu(menu_key, menu_title):
             target_url = build_url(
                 mode='wr_list', wr_url=entry['wr_url'], wr_title=title
             )
+            is_folder = True
         elif 'menu_key' in entry:
             # Branch — drills into another static menu.
             target_url = build_url(
                 mode='static_menu', key=entry['menu_key'], title=title
             )
+            is_folder = True
+        elif 'channel_id' in entry:
+            # Playable Pluto channel — resolved at play time via pluto.py.
+            li.setProperty('IsPlayable', 'true')
+            target_url = build_url(
+                mode='play_pluto', channel_id=entry['channel_id'], title=title
+            )
+            is_folder = False
         else:
             # Malformed entry — skip rather than break the whole listing.
-            log('list_static_menu: entry "{}" has neither wr_url nor menu_key'
+            log('list_static_menu: entry "{}" has none of wr_url / menu_key / channel_id'
                 .format(title), xbmc.LOGWARNING)
             continue
 
-        xbmcplugin.addDirectoryItem(HANDLE, target_url, li, isFolder=True)
+        xbmcplugin.addDirectoryItem(HANDLE, target_url, li, isFolder=is_folder)
 
     xbmcplugin.endOfDirectory(HANDLE)
 
@@ -1663,6 +1791,43 @@ def list_wr(wr_url, wr_title='Wrestling Rewind'):
     xbmcplugin.endOfDirectory(HANDLE)
 
 
+def _pluto_resolver_enabled():
+    """Read the kill-switch setting.  Default true.  Returns False only
+    when the user has explicitly turned the resolver off in settings."""
+    val = (ADDON.getSetting('pluto_resolver_enabled') or 'true').strip().lower()
+    return val not in ('false', '0', 'no', 'off')
+
+
+def _maybe_resolve_pluto(url, title=''):
+    """If url is a Pluto stitcher URL and the resolver is enabled, replace
+    it with a freshly-minted URL from boot.pluto.tv.  On any failure (resolver
+    disabled, no channel ID, network error, channel not in boot response)
+    return the original URL unchanged so we never make things worse than
+    v3.0.2.  Logs which path was taken so the Kodi log shows whether the
+    resolver fired or not."""
+    if not _is_pluto_url(url):
+        return url
+    if not _pluto_resolver_enabled():
+        log('play: Pluto resolver disabled by setting, using original URL', xbmc.LOGINFO)
+        return url
+
+    channel_id = _pluto.extract_channel_id(url)
+    if not channel_id:
+        log('play: Pluto URL but no channel ID extracted: {}'.format(url[:80]),
+            xbmc.LOGWARNING)
+        return url
+
+    fresh = _pluto.get_fresh_url(channel_id)
+    if not fresh:
+        log('play: Pluto resolver returned no URL for channel {} — falling back'
+            .format(channel_id), xbmc.LOGWARNING)
+        return url
+
+    log('play: Pluto channel {} resolved to fresh URL ("{}")'
+        .format(channel_id, title), xbmc.LOGINFO)
+    return fresh
+
+
 def play_wr(wr_item):
     """
     Resolve and play a Wrestling item.
@@ -1671,6 +1836,11 @@ def play_wr(wr_item):
       1. Try resolveurl on each candidate — debrid wins if available.
       2. Fall back to any direct video URL.
       3. Fall back to the first HTTP URL and let Kodi try it.
+
+    For Pluto TV URLs, an extra step runs after wrestling.resolve_best_link
+    — we mint a fresh stitcher URL via pluto.py.  This sidesteps the stale
+    session token problem in WOD's live.xml.  Falls back silently to the
+    original URL on any resolver failure.
 
     Pre-buffer applied using same setting and mechanism as IPTV playback.
     """
@@ -1698,6 +1868,10 @@ def play_wr(wr_item):
         xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
         return
 
+    # For Pluto URLs, swap in a freshly-minted URL from boot.pluto.tv.
+    # Silent passthrough for non-Pluto URLs (e.g., WWE Network CloudFront).
+    url = _maybe_resolve_pluto(url, title)
+
     log('play_wr: "{}" -> {} (debrid={})'.format(title, url[:60], via_debrid))
 
     li = xbmcgui.ListItem(path=url)
@@ -1706,6 +1880,58 @@ def play_wr(wr_item):
     # hand it to inputstream.adaptive — Kodi's built-in demuxer can fail on
     # session-bound HLS.  No-op for direct mp4/mkv/etc. and harmless if ISA
     # isn't installed.
+    _apply_isa_properties(li, url)
+
+    xbmcplugin.setResolvedUrl(HANDLE, True, li)
+    _apply_buffer(get_buffer_secs())
+
+
+def play_pluto(channel_id, title=''):
+    """
+    Resolve and play a Pluto TV channel directly by its channel ID.
+
+    Used by Sports Streams entries (STATIC_MENUS['live_sports']) — the user
+    picked a specific channel from a curated list, so we go straight to the
+    Pluto resolver without needing to walk a feed first.
+
+    Failure mode: if the resolver returns no URL (network error, channel not
+    in the boot response, region-locked away from this user), show a brief
+    notification and bail.  No fallback URL exists for play_pluto entries —
+    the channel ID IS the only address we have, unlike play_wr where a
+    stitcher URL is also baked into the feed.
+    """
+    if not channel_id:
+        log('play_pluto: empty channel_id', xbmc.LOGWARNING)
+        xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
+        return
+
+    if not _pluto_resolver_enabled():
+        xbmcgui.Dialog().notification(
+            'Echo OnDemand',
+            'Pluto resolver is disabled in settings.',
+            time=3000
+        )
+        log('play_pluto: resolver disabled, cannot play channel {}'.format(channel_id),
+            xbmc.LOGWARNING)
+        xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
+        return
+
+    url = _pluto.get_fresh_url(channel_id)
+    if not url:
+        xbmcgui.Dialog().notification(
+            'Echo OnDemand',
+            'Could not resolve channel.\nMay be region-locked or retired.',
+            time=4000
+        )
+        log('play_pluto: no URL for channel {} ("{}")'.format(channel_id, title),
+            xbmc.LOGWARNING)
+        xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
+        return
+
+    log('play_pluto: channel {} ("{}") -> {}'.format(channel_id, title, url[:60]))
+
+    li = xbmcgui.ListItem(path=url)
+    li.setContentLookup(False)
     _apply_isa_properties(li, url)
 
     xbmcplugin.setResolvedUrl(HANDLE, True, li)
@@ -1867,9 +2093,11 @@ def router(paramstring):
     wr_url    = params.get('wr_url', '')
     wr_title  = params.get('wr_title', 'Wrestling Rewind')
     wr_item   = params.get('wr_item', '')
-    # Static menu params (WOD/FOD curated trees).
+    # Static menu params (WOD/FOD curated trees + Live sub-menus).
     menu_key   = params.get('key', '')
     menu_title = params.get('title', '')
+    # Pluto TV channel-by-ID playback (Sports Streams).
+    channel_id = params.get('channel_id', '')
 
     if mode == 'movie_cats':
         list_movie_categories()
@@ -1893,6 +2121,8 @@ def router(paramstring):
         play_wr(wr_item)
     elif mode == 'static_menu':
         list_static_menu(menu_key, menu_title)
+    elif mode == 'play_pluto':
+        play_pluto(channel_id, menu_title)
     elif mode == 'settings_backup':
         do_settings_backup()
     elif mode == 'settings_restore':

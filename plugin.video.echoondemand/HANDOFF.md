@@ -1,7 +1,7 @@
 # Echo OnDemand — Developer Handoff Notes
 
-**Handed off at:** v3.0.0
-**Status:** Stable; v3.0.0 changes (Live category, rename, settings backup/restore, icon refresh) are new in this release and untested in production at handoff time.
+**Handed off at:** v3.1.0
+**Status:** Stable through v3.0.2; v3.1.0 introduces the Pluto resolver + Sports Streams list. The resolver code is well-tested in isolation but its real-world behaviour against Pluto's live boot endpoint has not been verified from the build environment (network sandbox restriction). First production install will be the real test of the boot endpoint integration; the kill-switch setting is the immediate fallback if anything misbehaves.
 
 This document is for whoever picks this up next — including future-me. It covers what the code is doing, why specific decisions were made, what was deliberately left out, and what the natural next steps are.
 
@@ -32,6 +32,57 @@ All four MicroJen-format sources (WR, WOD, FOD, Live) share the same parser, deb
 - Server URL in settings — hardcoded by design for this user base
 - Per-source feed root URL settings — stable enough that one-line code edits are simpler than user-facing settings
 - Symbol-only icons (no logo reproductions). All new icons are text-on-template using existing addon artwork as the base.
+
+---
+
+## Key Design Decisions (3.1.0)
+
+### Why a separate `pluto.py` module rather than inlining into `default.py`
+
+`pluto.py` is pure data-layer code — no Kodi UI calls, importable in isolation, fully unit-testable against synthesized boot responses without needing the Kodi runtime. Same separation we already have between `wrestling.py` (data) and `default.py` (UI). The boot endpoint is third-party and could change at any time; isolating that surface area into one module makes the failure mode obvious and the fix surgical.
+
+### Why the Pluto resolver fires for `play_wr` (not just `play_pluto`)
+
+WOD's `live.xml` feed contains stitcher URLs with baked-in session tokens that age out and were sometimes minted in regions Pluto has since retired (we observed Danish and Spanish retirement videos on v3.0.2 from US users). Routing those URLs through the resolver — extract channel ID, fetch fresh session, replace URL — fixes the WOD feed without us touching the WOD content layer at all. `play_wr` keeps the original URL as a fallback; if the resolver fails for any reason, behaviour is identical to v3.0.2.
+
+### Why a 30-minute session cache
+
+Pluto's session tokens nominally last ~1 hour. 30 minutes is the sweet spot:
+- A normal viewing session uses one boot fetch
+- Sessions don't go stale mid-watch even if the user pauses for 20+ minutes
+- We're not hammering Pluto's boot endpoint with one fetch per channel switch
+- `cache_clear_all` wipes it for users who explicitly want to force-refresh
+
+In-memory only — survives the lifetime of one Kodi addon process invocation, which is short anyway. Persisting it to disk would add complexity for negligible benefit.
+
+### Why a kill-switch setting (`pluto_resolver_enabled`)
+
+The Pluto boot endpoint is third-party with no SLA. If it changes shape, the resolver will start returning None for everything, and v3.1.0 would lose live wrestling entirely (since `play_wr` would fall back to stale-token URLs that produce retirement notices). The kill switch lets the user disable the resolver without rolling back the addon. Default on. When disabled:
+- `play_wr` skips the resolver and uses the stale URL directly (worst case: same as v3.0.2)
+- `play_pluto` returns a "resolver disabled" notification and bails — Sports Streams becomes non-functional
+
+This is asymmetric on purpose: `play_wr` has a fallback URL, `play_pluto` doesn't, because the channel ID is the only address Sports Streams entries have.
+
+### Why Sports Streams is curated rather than auto-discovered
+
+Pluto's boot response includes the entire current channel catalog — we could in theory render a giant list of every Pluto channel. Two reasons we don't:
+- The catalog has hundreds of channels, most irrelevant. A flat list is unusable; categorizing them automatically would be brittle.
+- The user asked for a specific small list of sports channels. Honoring that as a hardcoded list keeps the menu predictable and small. Adding a channel is one line in `STATIC_MENUS['live_sports']`.
+
+If a "browse all Pluto channels" view is ever wanted later, it's a separate `list_pluto_browse` view that walks the boot response. Not the same as Sports Streams.
+
+### Why `_apply_isa_properties` runs after the resolver
+
+Properties go on the final URL, not the original. The resolver may swap a URL that has no `pluto.tv` substring (rare in practice but possible) into one that does, or vice versa. By running the property setter after the URL is finalized, we apply Pluto-specific headers if and only if the URL we're actually playing needs them.
+
+### What "channel not found in boot response" actually means
+
+Three possibilities, in rough order of likelihood:
+1. Channel is not available in the user's region (Pluto geo-locks channels per-market)
+2. Channel has been retired entirely from Pluto's catalog
+3. Boot response was malformed or incomplete due to a transient API issue
+
+We can't distinguish between these from the response alone. The user-facing notification says "may be region-locked or retired" — covers cases 1 and 2 honestly. Case 3 self-corrects on the next play (we don't cache failures).
 
 ---
 
@@ -128,6 +179,14 @@ Feeds append human-readable labels to URLs in parentheses: `https://host.com/fil
 ---
 
 ## Known Limitations
+
+**Pluto's boot endpoint is third-party with no contract.** If Pluto changes the URL shape (`/v4/start` → `/v5/start`), the response schema (`channels[].stitched.urls[]` → some new path), or the parameter set, the resolver will start returning None for every channel. Symptom: live wrestling shows "Could not resolve stream" toasts on every play, Sports Streams shows "Could not resolve channel" on every click. Mitigation in place: kill-switch setting + `play_wr` fallback to original URL. Real fix when this happens: update `pluto._fetch_boot()` and `pluto._build_channel_url()` to match the new shape.
+
+**Pluto geo-locks channels per-region.** A channel ID that works for a US user may return "channel not in boot response" for a UK user (or vice versa). Not a bug — Pluto's content licensing is per-market. The user-facing notification says "may be region-locked or retired" since we can't tell which it is from the boot response alone.
+
+**The 30-minute session cache is per-process, not persistent.** Each Kodi addon process gets its own. If the user opens, plays, closes, reopens five times in an hour, that's five boot fetches, not one. Acceptable in practice — boot is a single small GET — but worth knowing if Pluto ever rate-limits more aggressively.
+
+**Sports Streams entries can't fall back to anything.** Unlike `play_wr` (which has a stitcher URL baked into the upstream feed as a fallback), Sports Streams entries only know the channel ID. If the resolver fails, the channel is unreachable for that user. `play_pluto` shows a notification and bails — there's nothing else to try.
 
 **Live category is single-source.** Only WOD has a live feed (`live.xml`). FOD is a replay-only service; WR has no live content. The parent menu is in place anticipating future sources.
 
