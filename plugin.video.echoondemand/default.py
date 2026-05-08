@@ -1,11 +1,35 @@
 #!/usr/bin/env python3
 """
-plugin.video.echoondemand — Echo OnDemand  v3.1.1
+plugin.video.echoondemand — Echo OnDemand  v3.1.2
 Kodi Omega (v21) plugin for browsing and playing VOD content (Movies and Series)
 from an Xtream Codes IPTV service, plus three on-demand replay sources via debrid
 (Wrestling Rewind, Wrestling on Demand, Fights on Demand) and a Live category
 (Live Wrestling — WOD's live.xml feed; Sports Streams — curated Pluto TV
 themed channels for golf, F1, UFC, MMA, boxing).
+
+Changes in 3.1.2 (Pluto resolver — construction path + diagnostic expansion):
+  - FIX: pluto.py now constructs the playable stitcher URL from the boot
+    response's `servers.stitcher` and `stitcherParams` components, the
+    same way Pluto's web player does.  Per the v3.1.1 production log,
+    Pluto's per-channel boot response contains an `EPG[1]` entry for the
+    requested channel but no pre-built URL inside it.  The session info
+    (sid, deviceId, JWT) is in `stitcherParams`; the base path is in
+    `servers.stitcher`; we now assemble:
+      {servers.stitcher}/v2/stitch/embed/hls/channel/{channel_id}/master.m3u8?{stitcherParams}
+    Construction runs after extraction fails, so a future Pluto change
+    that adds back pre-built URLs would still work via the original
+    extract path.
+  - LENIENT: EPG[]/channels[] match logic now accepts `_id`, `id`, or
+    `slug` as the ID field (previously only `_id`).  When a list has
+    exactly one entry — typical for per-channel boots — it's accepted
+    without ID matching, since channelSlug=<id> in the request guarantees
+    the response is for that channel.
+  - DIAGNOSTIC: When both extract and construction fail, the failure log
+    now includes: `servers.stitcher` value, `stitcherParams` value (first
+    200 chars), each channel-list-like array's first-entry keys, the
+    first-entry's id/_id/slug/name fields, the .stitched block's keys,
+    and a 1500-char response snippet split across 3 lines (so Kodi log
+    line-truncation doesn't lose the back half).
 
 Changes in 3.1.1 (Pluto resolver fix — match browser exactly + diagnostics):
   - REWRITE: pluto.py now matches the Pluto web app's actual API usage,
