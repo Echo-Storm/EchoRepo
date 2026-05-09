@@ -1,11 +1,60 @@
 #!/usr/bin/env python3
 """
-plugin.video.echoondemand — Echo OnDemand  v3.1.2
+plugin.video.echoondemand — Echo OnDemand  v3.2.0
 Kodi Omega (v21) plugin for browsing and playing VOD content (Movies and Series)
 from an Xtream Codes IPTV service, plus three on-demand replay sources via debrid
 (Wrestling Rewind, Wrestling on Demand, Fights on Demand) and a Live category
 (Live Wrestling — WOD's live.xml feed; Sports Streams — curated Pluto TV
 themed channels for golf, F1, UFC, MMA, boxing).
+
+Changes in 3.2.0 (Pluto resolver — switch to AppleTV-app pathway):
+  - REWRITE: pluto.py abandons the direct-to-Pluto boot endpoint approach
+    (which produced web-stitcher URLs that returned HTTP 403 due to CORS
+    gating, no matter how thoroughly we mimicked browser headers).  Now
+    uses the strategy from slyguy.pluto.tv.provider, which is well-
+    maintained and known-working in production:
+      1. HEAD jmp2.uk/plu-<channel_id>.m3u8 (Matt Huisman's redirect service).
+      2. Read the 302 Location header — it's a current Pluto stitcher URL
+         with session params already baked in, plus a {PSID} placeholder.
+      3. Substitute {PSID} with a deterministic UUID3(MAC) so the same
+         machine always presents the same identity to Pluto.
+      4. The resolved URL targets Pluto's AppleTV-app stitcher endpoint
+         (NOT the web one).  AppleTV apps don't operate in a browser
+         context, so this endpoint doesn't enforce CORS.  Setting our
+         User-Agent to match the AppleTV app's is what makes the requests
+         pass through.
+  - HEADERS: ISA's manifest_headers / stream_headers now sets only
+    User-Agent (matching the AppleTV app).  v3.1.3's Origin/Referer/Accept
+    additions were appropriate for the web stitcher but redundant — and
+    potentially anomalous — for the AppleTV stitcher.  Down to one header.
+  - DEPENDENCY: jmp2.uk (mjh.nz).  This is a third-party redirect service
+    we now depend on for URL resolution.  It's stable and used widely in
+    Kodi addon development.  If it ever goes down, the kill-switch setting
+    disables the resolver gracefully.
+  - REMOVED: The boot endpoint code path (boot.pluto.tv/v4/start), the
+    multi-shape response parsing (channels[]/EPG[]/channel singular), the
+    URL construction fallback (servers.stitcher + stitcherParams), and
+    the verbose diagnostic logging machinery.  All of it was needed to
+    reverse-engineer Pluto's web API; none of it is needed for the
+    redirect-service approach.  Net code reduction is ~200 lines.
+
+Changes in 3.1.3 (Pluto stream-fetch headers — clear stitcher CORS check):
+  - FIX: Added Origin, Accept, and Accept-Language to the inputstream.adaptive
+    manifest_headers / stream_headers properties for Pluto URLs.  Per v3.1.2
+    production logs, the URL construction worked (verified by Pluto returning
+    a fresh US-region session via `country=US`, `marketingRegion=US`, correct
+    deviceLat/Lon for Indiana) but ISA still got HTTP 403 fetching the
+    manifest itself.  The new stitcher endpoint (/v2/stitch/embed/hls/...
+    that v3.1.2 builds against) is stricter than the old /stitch/hls/...
+    path and enforces CORS-style origin checks; `Origin: https://pluto.tv`
+    closes that gap.  The Accept and Accept-Language headers are cheap
+    additional browser signals that don't hurt and may help with edge-case
+    filtering.
+  - HEADERS NOW SENT TO PLUTO STREAM FETCHES: User-Agent (Edge 147 from
+    pluto.py), Referer (https://pluto.tv/), Origin (https://pluto.tv),
+    Accept (*/*), Accept-Language (en-US,en;q=0.9).  Non-Pluto HLS streams
+    (WWE Network CloudFront, etc.) still skip header injection entirely —
+    only URLs containing pluto.tv get the Pluto-specific treatment.
 
 Changes in 3.1.2 (Pluto resolver — construction path + diagnostic expansion):
   - FIX: pluto.py now constructs the playable stitcher URL from the boot
@@ -1560,24 +1609,26 @@ def _wr_ttl():
 # ---------------------------------------------------------------------------
 # Pluto TV HLS header workaround
 # ---------------------------------------------------------------------------
-# Pluto's edge servers (cfd-v4-service-channel-stitcher-*.prd.pluto.tv) check
-# the request's User-Agent and return HTTP 403 for clients that don't look
-# like a web browser.  Setting the same browser UA + pluto.tv Referer via
-# inputstream.adaptive's header properties as we use for the boot call
-# clears that filtering for the actual stream segments too.
+# Pluto's stitcher CDN inspects the User-Agent on manifest and segment
+# fetches.  We set it to match the AppleTV native Pluto app's UA (defined
+# in pluto.BROWSER_UA) — this matches the endpoint that pluto.py's
+# resolver targets via jmp2.uk redirect, and it's the User-Agent that
+# stitcher endpoint expects.
 #
-# This affects WOD's live wrestling channels and Sports Streams — most stream
-# from Pluto.  Without these headers, ISA fetches the manifest and gets 403'd
-# back ("Download failed, HTTP error 403" from inputstream.adaptive in the
-# log).  Non-Pluto HLS streams (e.g., the WWE Network CloudFront feed) work
-# without any of this and are left alone.
+# v3.2.0 simplification: previously we sent web-shaped headers
+# (Origin, Referer, Accept, sec-ch-ua, ...) trying to look like a browser
+# tab.  That was for the WEB stitcher endpoint, which enforces CORS.
+# The AppleTV-app endpoint we now target is non-CORS and only checks
+# User-Agent — so all the browser pretense is unnecessary and might
+# actually look suspicious (an "AppleTV app" sending an Origin header
+# is anomalous).  Down to one header.
 #
-# The User-Agent constant lives in pluto.py and is imported here so both
-# the boot session and the playback session present the same client identity.
+# Non-Pluto HLS streams (WWE Network on CloudFront, etc.) skip header
+# injection entirely — _is_pluto_url gates the whole block in
+# _apply_isa_properties.
 
 _PLUTO_HEADERS = urlencode({
     'User-Agent': _pluto.BROWSER_UA,
-    'Referer':    'https://pluto.tv/',
 }, quote_via=quote)   # %20 for spaces, not '+' — quote is correct for HTTP headers
 
 
