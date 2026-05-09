@@ -1,11 +1,41 @@
 #!/usr/bin/env python3
 """
-plugin.video.echoondemand — Echo OnDemand  v3.2.0
+plugin.video.echoondemand — Echo OnDemand  v3.3.0
 Kodi Omega (v21) plugin for browsing and playing VOD content (Movies and Series)
 from an Xtream Codes IPTV service, plus three on-demand replay sources via debrid
 (Wrestling Rewind, Wrestling on Demand, Fights on Demand) and a Live category
-(Live Wrestling — WOD's live.xml feed; Sports Streams — curated Pluto TV
-themed channels for golf, F1, UFC, MMA, boxing).
+(Live Wrestling — WOD's live.xml; plus all USA Pluto TV channels organized by
+Pluto's own category groupings — Sports / News / Entertainment / Movies / etc).
+
+Changes in 3.3.0 (Pluto USA full lineup via mjh's catalog):
+  - REPLACED: Sports Streams (the curated 7-channel list) is gone. The Live
+    menu is now structured as:
+      Live
+      ├── Live Wrestling     (WOD's live.xml — unchanged)
+      ├── Sports             (all Pluto USA "Sports" channels)
+      ├── News               (all Pluto USA "News" channels)
+      ├── Entertainment      (...)
+      └── ...                (every Pluto USA group, alphabetical)
+    Each category folder lists its channels alphabetically by name with
+    EPG plot showing the next 5 upcoming programs in local time.
+  - NEW: resources/lib/pluto_catalog.py — fetches mjh's gzipped catalog
+    (https://i.mjh.nz/PlutoTV/.channels.json.gz), caches in memory for
+    6 hours.  Public API: get_catalog(), clear_cache(), usa_groups(),
+    channels_in_group().  Used by the new list_live() and
+    list_pluto_channels() views.
+  - NEW: list_live() — replaces the old static_menu route for Live.
+    Renders Live Wrestling at top + Pluto USA categories below, dynamically.
+  - NEW: list_pluto_channels(group) — renders channels in a Pluto category,
+    alphabetical by name, with EPG plot.
+  - REMOVED: STATIC_MENUS['live_sports'] (the curated 7 channels).
+  - REMOVED: 6 generated sports icons (Golf.png, F1.png, UFC.png,
+    Bellator.png, ONE.png, Boxing.png) since they're no longer referenced.
+  - WIRING: cache_clear_all now also wipes the catalog cache, so Refresh /
+    Clear Cache forces a fresh catalog fetch on the next Live menu open.
+  - DEPENDENCY: i.mjh.nz, in addition to jmp2.uk added in v3.2.0. Both are
+    Matt Huisman's services. If mjh's catalog host is unavailable, list_live
+    still shows Live Wrestling and surfaces a friendly notification; jmp2.uk
+    handles channel resolution independently of catalog availability.
 
 Changes in 3.2.0 (Pluto resolver — switch to AppleTV-app pathway):
   - REWRITE: pluto.py abandons the direct-to-Pluto boot endpoint approach
@@ -368,8 +398,9 @@ import xbmcplugin
 import xbmcaddon
 import xbmcvfs
 
-from resources.lib import wrestling as _wr
-from resources.lib import pluto     as _pluto
+from resources.lib import wrestling     as _wr
+from resources.lib import pluto         as _pluto
+from resources.lib import pluto_catalog as _catalog
 
 # ---------------------------------------------------------------------------
 # Bootstrap
@@ -515,40 +546,17 @@ STATIC_MENUS = {
     ],
 
     # ---------- Live ----------
-    # Two sub-categories: 'Live Wrestling' walks WOD's live.xml feed (which
-    # has its own dynamic channel list maintained upstream), and 'Sports
-    # Streams' walks our curated list of Pluto TV themed sports channels.
-    # Both ultimately resolve through pluto.py — wrestling channels are
-    # routed there transparently in play_wr, and Sports Streams entries
-    # use the dedicated play_pluto view by channel ID.
+    # Live Wrestling stays here as a static entry (WOD's live.xml feed,
+    # channels resolved through pluto.py).  Pluto USA categories are no
+    # longer in STATIC_MENUS — they're rendered dynamically by list_live()
+    # from mjh's catalog.  See list_live() for the full Live menu shape.
+    #
+    # If WOD ever publishes a second live feed (live fights, etc.), it
+    # can be added here as another static entry without touching the
+    # dynamic Pluto rendering.
     'live_root': [
         {'title': 'Live Wrestling',       'wr_url':     WOD_BASE + '/live.xml',
                                           'icon_label': 'Live Wrestling'},
-        {'title': 'Sports Streams',       'menu_key':   'live_sports',
-                                          'icon_label': 'Live'},
-    ],
-
-    # ---------- Sports Streams (Pluto TV channels, curated) ----------
-    # 24/7 themed sports channels.  Each entry is rendered by list_static_menu
-    # but with a 'channel_id' field that triggers the play_pluto branch
-    # instead of a sub-menu navigation.  Adding a channel is a one-line
-    # edit — find the channel ID in the pluto.tv URL bar (the 24-char hex
-    # in /us/live-tv/<id>) and add an entry below.
-    'live_sports': [
-        {'title': 'Golf Central',         'channel_id': '65493029ab052400089e9d2f',
-                                          'icon_label': 'Golf'},
-        {'title': 'F1 Channel',           'channel_id': '65c69ee3d77d450008c80438',
-                                          'icon_label': 'F1'},
-        {'title': 'UFC',                  'channel_id': '677d9adfa9a51b0008497fa0',
-                                          'icon_label': 'UFC'},
-        {'title': 'Bellator MMA',         'channel_id': '5ebc8688f3697d00072f7cf8',
-                                          'icon_label': 'Bellator'},
-        {'title': 'ONE Championship',     'channel_id': '668c5d3bfd9eb2000882bb50',
-                                          'icon_label': 'ONE'},
-        {'title': 'Top Rank Classics',    'channel_id': '64d160f53c785e0008df525e',
-                                          'icon_label': 'Boxing'},
-        {'title': 'DAZN Ringside',        'channel_id': '649b6898f2ec0000081a9460',
-                                          'icon_label': 'Boxing'},
     ],
 }
 
@@ -691,10 +699,12 @@ def cache_clear_all():
             log('Deleted cache: {}'.format(os.path.basename(path)))
         except Exception as e:
             log('Could not delete {}: {}'.format(path, e), xbmc.LOGWARNING)
-    # Wipe the in-memory Pluto session cache too — next play_pluto / play_wr
-    # against a Pluto channel will fetch a fresh boot response.
+    # Wipe the in-memory Pluto session cache + catalog cache too — next
+    # play_pluto / play_wr against a Pluto channel will fetch a fresh URL,
+    # and the next Live menu open re-fetches the catalog from mjh.
     _pluto.clear_session_cache()
-    log('Pluto session cache cleared')
+    _catalog.clear_cache()
+    log('Pluto session + catalog caches cleared')
 
 
 # ---------------------------------------------------------------------------
@@ -1205,14 +1215,13 @@ def list_root(update_listing=False):
         li, isFolder=True
     )
 
-    # Live — currently single-source (Live Wrestling from WOD's live.xml).
-    # Parent menu is in place for future expansion when live fight feeds
-    # appear upstream.  See STATIC_MENUS['live_root'].
+    # Live — Live Wrestling (static, WOD's live.xml feed) plus all USA Pluto
+    # categories rendered dynamically from mjh's catalog.  See list_live().
     li = xbmcgui.ListItem(label='Live', offscreen=True)
     li.setArt({'icon': ADDON_ICON, 'thumb': ADDON_ICON, 'fanart': ADDON_FANART})
     xbmcplugin.addDirectoryItem(
         HANDLE,
-        build_url(mode='static_menu', key='live_root', title='Live'),
+        build_url(mode='list_live'),
         li, isFolder=True
     )
 
@@ -1632,9 +1641,10 @@ _PLUTO_HEADERS = urlencode({
 }, quote_via=quote)   # %20 for spaces, not '+' — quote is correct for HTTP headers
 
 
-# Wire pluto.py's diagnostic logging into Kodi's log.  pluto.py uses string
-# levels ('INFO', 'WARN', 'ERROR') so it can stay free of Kodi imports;
-# we translate to xbmc.LOG* here.  This call runs once at module import time.
+# Wire pluto.py's and pluto_catalog.py's diagnostic logging into Kodi's log.
+# Both modules use string levels ('INFO', 'WARN', 'ERROR') so they can stay
+# free of Kodi imports; we translate to xbmc.LOG* here.  These calls run
+# once at module import time.
 def _bridge_pluto_logger(msg, level='INFO'):
     levelmap = {
         'INFO':  xbmc.LOGINFO,
@@ -1644,6 +1654,7 @@ def _bridge_pluto_logger(msg, level='INFO'):
     log(msg, levelmap.get(level, xbmc.LOGINFO))
 
 _pluto.set_logger(_bridge_pluto_logger)
+_catalog.set_logger(_bridge_pluto_logger)
 
 
 def _looks_like_hls(url):
@@ -1695,6 +1706,221 @@ def _apply_isa_properties(li, url):
     if _is_pluto_url(url):
         li.setProperty('inputstream.adaptive.manifest_headers', _PLUTO_HEADERS)
         li.setProperty('inputstream.adaptive.stream_headers',   _PLUTO_HEADERS)
+
+
+def _format_epg_plot(chan):
+    """Build a multi-line plot string from a channel's EPG data.
+
+    mjh's catalog provides each channel's `programs` array as a list of
+    [iso_timestamp, title] pairs.  We extract the next 5 upcoming entries
+    and format them as:
+
+        [10:00am] SportsCenter
+        [11:00am] First Take
+        [12:00pm] Around the Horn
+
+    Past entries are skipped (their next-entry-start is already behind us).
+    Falls back to the channel's `description` field when no upcoming
+    programs are available, or to empty string if neither exists.
+
+    Returns a plain string suitable for setPlot().  Times are rendered in
+    the user's local timezone using time.localtime() — no external library
+    needed and it matches what other Kodi addons do.
+    """
+    progs = chan.get('programs') or []
+    if not isinstance(progs, list) or not progs:
+        return chan.get('description') or ''
+
+    now = time.time()
+    upcoming = []
+    for i, entry in enumerate(progs):
+        if not isinstance(entry, (list, tuple)) or len(entry) < 2:
+            continue
+        ts_str, title = entry[0], entry[1]
+        start = _parse_iso_to_epoch(ts_str)
+        if start is None:
+            continue
+        # End of program = start of next entry, or +1hr fallback.
+        end = None
+        if i + 1 < len(progs):
+            try:
+                end = _parse_iso_to_epoch(progs[i + 1][0])
+            except Exception:
+                end = None
+        if end is None:
+            end = start + 3600
+        if end < now:
+            continue   # already over
+        upcoming.append((start, title))
+        if len(upcoming) >= 5:
+            break
+
+    if not upcoming:
+        return chan.get('description') or ''
+
+    lines = []
+    for ts, title in upcoming:
+        lt = time.localtime(ts)
+        h, m = lt.tm_hour, lt.tm_min
+        if h == 0:
+            disp = '12:{:02d}am'.format(m)
+        elif h < 12:
+            disp = '{}:{:02d}am'.format(h, m)
+        elif h == 12:
+            disp = '12:{:02d}pm'.format(m)
+        else:
+            disp = '{}:{:02d}pm'.format(h - 12, m)
+        lines.append('[{}] {}'.format(disp, title))
+    return '\n'.join(lines)
+
+
+def _parse_iso_to_epoch(s):
+    """Parse an ISO-8601 timestamp like '2026-05-09T10:00:00Z' (or with
+    millisecond precision and offset) into a unix epoch timestamp.
+    Returns None on any failure — caller falls back gracefully.
+
+    Stays simple: we only need to compare timestamps to time.time() for
+    EPG filtering, so timezone parsing is best-effort.  Strings ending
+    in 'Z' are UTC; the calendar.timegm path handles those.  Anything
+    else with an offset is parsed by stripping the offset (close enough
+    for "is this in the past or future" decisions).
+    """
+    if not isinstance(s, str) or not s:
+        return None
+    import calendar
+    # Strip fractional seconds and timezone, if any.
+    base = s.replace('Z', '')
+    if '.' in base:
+        base = base.split('.', 1)[0]
+    if '+' in base:
+        base = base.split('+', 1)[0]
+    if base.count('-') > 2:
+        # offset like '...10:00:00-05:00' — split off the trailing offset
+        idx = base.rfind('-')
+        if idx > 10:   # past the date hyphens
+            base = base[:idx]
+    try:
+        tm = time.strptime(base, '%Y-%m-%dT%H:%M:%S')
+    except Exception:
+        return None
+    return calendar.timegm(tm)
+
+
+def list_live():
+    """Render the Live category root.
+
+    Top: Live Wrestling (static — WOD's live.xml feed).
+    Below: One folder per Pluto USA channel group (Sports, News,
+    Entertainment, etc.), discovered from mjh's catalog.  Folders are
+    rendered in alphabetical order.
+
+    If the catalog fetch fails (mjh down, no network), only the static
+    Live Wrestling entry shows.  A friendly notification surfaces the
+    failure but doesn't block.
+    """
+    xbmcplugin.setPluginCategory(HANDLE, 'Echo OnDemand \u2014 Live')
+    xbmcplugin.setContent(HANDLE, 'files')
+
+    # Static section — STATIC_MENUS['live_root'] (currently just Live Wrestling).
+    # Iterating it instead of hardcoding lets future additions land cleanly.
+    for entry in STATIC_MENUS.get('live_root', []):
+        title     = entry.get('title', 'Unknown')
+        icon_path = _menu_icon(entry.get('icon_label', ''))
+        li = xbmcgui.ListItem(label=title, offscreen=True)
+        li.setArt({'thumb': icon_path, 'icon': icon_path, 'fanart': ADDON_FANART})
+        if 'wr_url' in entry:
+            target = build_url(mode='wr_list', wr_url=entry['wr_url'], wr_title=title)
+            xbmcplugin.addDirectoryItem(HANDLE, target, li, isFolder=True)
+
+    # Dynamic section — Pluto USA categories from mjh's catalog.
+    catalog = _catalog.get_catalog()
+    if catalog is None:
+        # Network failure or parse error — pluto_catalog already logged it.
+        # Show a quiet user notification and end with what we have.
+        xbmcgui.Dialog().notification(
+            'Echo OnDemand',
+            'Could not load Pluto channel catalog.',
+            time=3000
+        )
+        xbmcplugin.endOfDirectory(HANDLE)
+        return
+
+    groups = _catalog.usa_groups(catalog)
+    if not groups:
+        log('list_live: catalog has no USA channels', xbmc.LOGWARNING)
+        xbmcplugin.endOfDirectory(HANDLE)
+        return
+
+    for group_name in sorted(groups.keys(), key=str.lower):
+        count = groups[group_name]
+        li = xbmcgui.ListItem(label=group_name, offscreen=True)
+        li.setArt({'icon': ADDON_ICON, 'thumb': ADDON_ICON, 'fanart': ADDON_FANART})
+        li.getVideoInfoTag().setPlot(
+            '{} channel{}'.format(count, '' if count == 1 else 's')
+        )
+        target = build_url(mode='pluto_chans', group=group_name)
+        xbmcplugin.addDirectoryItem(HANDLE, target, li, isFolder=True)
+
+    xbmcplugin.endOfDirectory(HANDLE)
+
+
+def list_pluto_channels(group_name):
+    """Render channels in a single Pluto USA category.
+
+    Channels are sorted alphabetically by name (case-insensitive).  Each
+    channel becomes a playable item routing to play_pluto with its 24-char
+    ID.  Channel logo + art come straight from mjh's catalog (Pluto's own
+    CDN-hosted assets).  EPG plot built from the catalog's `programs`
+    array via _format_epg_plot.
+
+    The category name comes from the URL — we look it up in the cached
+    catalog rather than passing data through the URL.  If the catalog
+    has aged out between the user clicking the category and us getting
+    here, it'll re-fetch transparently.
+    """
+    if not group_name:
+        log('list_pluto_channels: empty group name', xbmc.LOGWARNING)
+        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
+        return
+
+    xbmcplugin.setPluginCategory(HANDLE,
+        'Echo OnDemand \u2014 Live \u2014 {}'.format(group_name))
+    xbmcplugin.setContent(HANDLE, 'videos')
+
+    catalog = _catalog.get_catalog()
+    if catalog is None:
+        xbmcgui.Dialog().notification(
+            'Echo OnDemand',
+            'Could not load Pluto channel catalog.',
+            time=3000
+        )
+        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
+        return
+
+    channels = _catalog.channels_in_group(catalog, group_name)
+    if not channels:
+        log('list_pluto_channels: no channels in group "{}"'.format(group_name),
+            xbmc.LOGWARNING)
+        xbmcplugin.endOfDirectory(HANDLE)
+        return
+
+    for chan in sorted(channels, key=lambda c: (c.get('name') or '').lower()):
+        name = chan.get('name') or 'Unknown'
+        logo = chan.get('logo') or ADDON_ICON
+        art  = chan.get('art')  or ADDON_FANART
+
+        li = xbmcgui.ListItem(label=name, offscreen=True)
+        li.setArt({'thumb': logo, 'icon': logo, 'fanart': art})
+        plot = _format_epg_plot(chan)
+        if plot:
+            li.getVideoInfoTag().setPlot(plot)
+        li.getVideoInfoTag().setMediaType('video')
+        li.setProperty('IsPlayable', 'true')
+
+        target = build_url(mode='play_pluto', channel_id=chan['id'], title=name)
+        xbmcplugin.addDirectoryItem(HANDLE, target, li, isFolder=False)
+
+    xbmcplugin.endOfDirectory(HANDLE)
 
 
 def list_static_menu(menu_key, menu_title):
@@ -1965,15 +2191,17 @@ def play_pluto(channel_id, title=''):
     """
     Resolve and play a Pluto TV channel directly by its channel ID.
 
-    Used by Sports Streams entries (STATIC_MENUS['live_sports']) — the user
-    picked a specific channel from a curated list, so we go straight to the
-    Pluto resolver without needing to walk a feed first.
+    Called from two places: list_pluto_channels (the dynamic Pluto USA
+    category browse, where the user picked a channel from one of the
+    Live → <category> lists), and historically from any STATIC_MENUS
+    entry with a 'channel_id' field.  Either way, we have a known
+    channel ID and route straight to pluto.get_fresh_url().
 
-    Failure mode: if the resolver returns no URL (network error, channel not
-    in the boot response, region-locked away from this user), show a brief
+    Failure mode: if the resolver returns no URL (network error, jmp2.uk
+    has no entry for this channel, kill switch on), show a brief
     notification and bail.  No fallback URL exists for play_pluto entries —
     the channel ID IS the only address we have, unlike play_wr where a
-    stitcher URL is also baked into the feed.
+    stitcher URL is also baked into WOD's feed.
     """
     if not channel_id:
         log('play_pluto: empty channel_id', xbmc.LOGWARNING)
@@ -2171,8 +2399,11 @@ def router(paramstring):
     # Static menu params (WOD/FOD curated trees + Live sub-menus).
     menu_key   = params.get('key', '')
     menu_title = params.get('title', '')
-    # Pluto TV channel-by-ID playback (Sports Streams).
+    # Pluto TV channel-by-ID playback.
     channel_id = params.get('channel_id', '')
+    # Pluto category browsing — `group` is a Pluto channel-group name
+    # like 'Sports', 'News', 'Entertainment' (from mjh's catalog).
+    group_name = params.get('group', '')
 
     if mode == 'movie_cats':
         list_movie_categories()
@@ -2198,6 +2429,10 @@ def router(paramstring):
         list_static_menu(menu_key, menu_title)
     elif mode == 'play_pluto':
         play_pluto(channel_id, menu_title)
+    elif mode == 'list_live':
+        list_live()
+    elif mode == 'pluto_chans':
+        list_pluto_channels(group_name)
     elif mode == 'settings_backup':
         do_settings_backup()
     elif mode == 'settings_restore':
