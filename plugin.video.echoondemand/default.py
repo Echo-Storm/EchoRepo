@@ -1,11 +1,56 @@
 #!/usr/bin/env python3
 """
-plugin.video.echoondemand — Echo OnDemand  v3.3.0
+plugin.video.echoondemand — Echo OnDemand  v4.0.0
 Kodi Omega (v21) plugin for browsing and playing VOD content (Movies and Series)
-from an Xtream Codes IPTV service, plus three on-demand replay sources via debrid
-(Wrestling Rewind, Wrestling on Demand, Fights on Demand) and a Live category
-(Live Wrestling — WOD's live.xml; plus all USA Pluto TV channels organized by
-Pluto's own category groupings — Sports / News / Entertainment / Movies / etc).
+from an Xtream Codes IPTV service, plus a unified Stream menu containing all
+live + on-demand replay sources (Live Wrestling, Wrestling Rewind, Wrestling on
+Demand, Fights on Demand, and the full USA Pluto TV channel lineup organized
+by Pluto's own category groupings).
+
+Changes in 4.0.0 (top-menu restructure + addon-wide icon pass):
+  - RESTRUCTURE: Top menu reduced from 9 entries to 4. Layout is now:
+      Movies
+      Series
+      Stream    (new home for all live + replay sources)
+      Tools     (new home for backup / restore / refresh)
+    The v3.x arrangement had Wrestling Rewind, WOD, FOD, and Live as
+    separate root entries, plus three Tools-y entries pinned to the
+    bottom. Cleaner now.
+  - NEW: list_stream() — Stream menu has Live Wrestling at top, then
+    Wrestling Rewind, Wrestling on Demand, Fights on Demand, then all
+    Pluto USA categories alphabetically. Replaces the v3.3.0 list_live().
+  - NEW: list_tools() — single home for Backup / Restore / Refresh.
+  - REMOVED: mode=list_live route (replaced by mode=list_stream). Any
+    Kodi favorites pointing at the old route will need to be re-added.
+  - ICONS: 26 new bundled icons in resources/images/genres/ to provide
+    visual consistency across menus that previously fell back to the
+    plain addon icon. Pluto USA categories: Animals & Nature, Anime,
+    Classic TV, Competition Reality, Daytime & Game Shows, En Espanol,
+    Entertainment, History & Science, Home & Food, Local News, Movies,
+    Music Videos, News & Opinion, Sports, True Crime, Westerns. WoD /
+    FoD / Tools sub-menus: WWE, Other Promotions, Interviews, Special
+    Matches, Random Events, Movies & TV, Archive, UFC, Tools, Stream.
+    Plus Series (top menu).
+  - ICON LOOKUP: _menu_icon() now tolerant of name variations — case-
+    insensitive matching, '&' / '+' / ' and ' interchangeable, accent
+    stripping (Espa\u00f1ol -> Espanol), and a plural fall-through
+    (Westerns -> Western). So whichever exact form Pluto's catalog
+    happens to use for a category will resolve to the right icon as
+    long as the canonical name is anywhere close.
+  - STATIC_MENUS: Filled in icon_label fields on every WoD / FoD entry
+    that previously had none (Other Promotions, Interviews & Kayfabe,
+    Special Matches, Random Events, Movies & TV, Archive, WWE root,
+    UFC sub-entries, etc).
+  - WR FIX: Wrestling Rewind's upstream feed includes a "Settings"
+    entry that's an internal/admin link, not watchable content — now
+    filtered at render time. Restricted to WR feeds only (URL contains
+    'wrestlingrewind') so a WoD/FoD entry legitimately named "Settings"
+    wouldn't be hidden.
+  - WR FIX: Wrestling Rewind backgrounds were flickering between
+    sub-categories because per-item fanart in the upstream feed varies
+    wildly. Now WR consistently uses ADDON_FANART for the background.
+    WoD/FoD keep using item-level fanart as before — they don't have
+    the flicker problem.
 
 Changes in 3.3.0 (Pluto USA full lineup via mjh's catalog):
   - REPLACED: Sports Streams (the curated 7-channel list) is gone. The Live
@@ -468,15 +513,22 @@ FOD_BASE = 'https://mylostsoulspace.co.uk/FightsOnDemand'
 STATIC_MENUS = {
     # ---------- Wrestling on Demand ----------
     'wod_root': [
-        {'title': 'WWE',                  'menu_key':   'wod_wwe'},
-        {'title': 'Other Promotions',     'menu_key':   'wod_other'},
+        {'title': 'WWE',                  'menu_key':   'wod_wwe',
+                                          'icon_label': 'WWE'},
+        {'title': 'Other Promotions',     'menu_key':   'wod_other',
+                                          'icon_label': 'Other Promotions'},
         {'title': 'Documentaries',        'wr_url':     WOD_BASE + '/documentaries/docmain.xml',
                                           'icon_label': 'Documentary'},
-        {'title': 'Interviews & Kayfabe', 'wr_url':     WOD_BASE + '/kayfabe/main.xml'},
-        {'title': 'Special Matches',      'wr_url':     WOD_BASE + '/specialmatches/specialmatches.xml'},
-        {'title': 'Random Events',        'wr_url':     WOD_BASE + '/latestshows/randomevents.xml'},
-        {'title': 'Movies & TV',          'wr_url':     WOD_BASE + '/mov.xml'},
-        {'title': 'Archive',              'wr_url':     WOD_BASE + '/Archives/archives.xml'},
+        {'title': 'Interviews & Kayfabe', 'wr_url':     WOD_BASE + '/kayfabe/main.xml',
+                                          'icon_label': 'Interviews'},
+        {'title': 'Special Matches',      'wr_url':     WOD_BASE + '/specialmatches/specialmatches.xml',
+                                          'icon_label': 'Special Matches'},
+        {'title': 'Random Events',        'wr_url':     WOD_BASE + '/latestshows/randomevents.xml',
+                                          'icon_label': 'Random Events'},
+        {'title': 'Movies & TV',          'wr_url':     WOD_BASE + '/mov.xml',
+                                          'icon_label': 'Movies & TV'},
+        {'title': 'Archive',              'wr_url':     WOD_BASE + '/Archives/archives.xml',
+                                          'icon_label': 'Archive'},
     ],
     'wod_wwe': [
         {'title': 'RAW',                  'wr_url':     WOD_BASE + '/latestshows/raw.xml',
@@ -491,7 +543,8 @@ STATIC_MENUS = {
                                           'icon_label': 'WrestleMania'},
         {'title': 'PPV Events',           'wr_url':     WOD_BASE + '/ppv/ppvmain.xml',
                                           'icon_label': 'PPV Events'},
-        {'title': 'WWE YouTube',          'wr_url':     WOD_BASE + '/wweyt.xml'},
+        {'title': 'WWE YouTube',          'wr_url':     WOD_BASE + '/wweyt.xml',
+                                          'icon_label': 'WWE'},
     ],
     'wod_other': [
         {'title': 'AEW',                  'wr_url':     WOD_BASE + '/aew/aewppv.xml',
@@ -514,27 +567,39 @@ STATIC_MENUS = {
     'fod_root': [
         {'title': 'Latest UFC / MMA',     'wr_url':     FOD_BASE + '/latestufc-mmaevents.xml',
                                           'icon_label': 'UFC Replays'},
-        {'title': 'UFC Events',           'menu_key':   'fod_ufc'},
+        {'title': 'UFC Events',           'menu_key':   'fod_ufc',
+                                          'icon_label': 'UFC'},
         {'title': 'MMA Events',           'wr_url':     FOD_BASE + '/mmaevents/mmaeventreplaysmain-new.xml',
                                           'icon_label': 'MMA'},
         {'title': 'Boxing',               'wr_url':     FOD_BASE + '/boxing/boxingreplays-new.xml',
                                           'icon_label': 'Boxing Replays'},
-        {'title': 'Free (No Debrid)',     'menu_key':   'fod_free'},
+        {'title': 'Free (No Debrid)',     'menu_key':   'fod_free',
+                                          'icon_label': 'Free'},
     ],
     'fod_ufc': [
         {'title': 'UFC PPV',              'wr_url':     FOD_BASE + '/ufcevents/ufcppv-new.xml',
                                           'icon_label': 'UFC Replays'},
-        {'title': 'UFC Fight Night',      'wr_url':     FOD_BASE + '/ufcevents/ufcfightnightreplays-new.xml'},
-        {'title': 'UFC on ESPN',          'wr_url':     FOD_BASE + '/ufcevents/ufcfightnightonespn-new.xml'},
-        {'title': 'UFC on ABC',           'wr_url':     FOD_BASE + '/ufcevents/ufconabc-new.xml'},
-        {'title': 'UFC on FOX',           'wr_url':     FOD_BASE + '/ufcevents/ufconfoxtv-new.xml'},
-        {'title': 'UFC on FUEL',          'wr_url':     FOD_BASE + '/ufcevents/ufconfueltv-new.xml'},
-        {'title': 'UFC BJJ',              'wr_url':     FOD_BASE + '/ufcevents/ufcbjj-new.xml'},
-        {'title': 'UFC Shows & Series',   'wr_url':     FOD_BASE + '/ufcshows/ufcshowsmain-new.xml'},
-        {'title': 'Classic UFC PPV',      'wr_url':     FOD_BASE + '/ufcevents/classicufc-new.xml'},
+        {'title': 'UFC Fight Night',      'wr_url':     FOD_BASE + '/ufcevents/ufcfightnightreplays-new.xml',
+                                          'icon_label': 'UFC'},
+        {'title': 'UFC on ESPN',          'wr_url':     FOD_BASE + '/ufcevents/ufcfightnightonespn-new.xml',
+                                          'icon_label': 'UFC'},
+        {'title': 'UFC on ABC',           'wr_url':     FOD_BASE + '/ufcevents/ufconabc-new.xml',
+                                          'icon_label': 'UFC'},
+        {'title': 'UFC on FOX',           'wr_url':     FOD_BASE + '/ufcevents/ufconfoxtv-new.xml',
+                                          'icon_label': 'UFC'},
+        {'title': 'UFC on FUEL',          'wr_url':     FOD_BASE + '/ufcevents/ufconfueltv-new.xml',
+                                          'icon_label': 'UFC'},
+        {'title': 'UFC BJJ',              'wr_url':     FOD_BASE + '/ufcevents/ufcbjj-new.xml',
+                                          'icon_label': 'UFC'},
+        {'title': 'UFC Shows & Series',   'wr_url':     FOD_BASE + '/ufcshows/ufcshowsmain-new.xml',
+                                          'icon_label': 'UFC'},
+        {'title': 'Classic UFC PPV',      'wr_url':     FOD_BASE + '/ufcevents/classicufc-new.xml',
+                                          'icon_label': 'UFC Replays'},
         {'title': 'Classic UFC Fight Night',
-                                          'wr_url':     FOD_BASE + '/ufcevents/classicfightnight-new.xml'},
-        {'title': 'UFC Events Main',      'wr_url':     FOD_BASE + '/ufcevents/ufceventreplaysmain-new.xml'},
+                                          'wr_url':     FOD_BASE + '/ufcevents/classicfightnight-new.xml',
+                                          'icon_label': 'UFC'},
+        {'title': 'UFC Events Main',      'wr_url':     FOD_BASE + '/ufcevents/ufceventreplaysmain-new.xml',
+                                          'icon_label': 'UFC'},
     ],
     'fod_free': [
         {'title': 'Free UFC',             'wr_url':     FOD_BASE + '/nondebridufc.xml',
@@ -566,14 +631,63 @@ def _menu_icon(label):
     Return the bundled icon path for a menu entry's icon_label, or ADDON_ICON
     if no bundled match exists.  Stays inside resources/images/genres/ —
     does not consult the optional moviegenreicons resource addon and does not
-    fall back to DefaultGenre.png.  Keeps the WOD/FOD menu look uniform with
-    the rest of Echo OnDemand.
+    fall back to DefaultGenre.png.
+
+    Tolerant of name variations so Pluto's category-name conventions don't
+    require us to guess the exact form when icons are added:
+
+      - case-insensitive filename match
+      - '&' / '+' / ' and ' interchangeable in the label
+      - leading/trailing whitespace stripped
+      - accented characters stripped (Espa\u00f1ol -> Espanol)
+      - simple plural/singular fall-throughs (Westerns -> Western)
+
+    Lookup order tries each variant in turn; first match wins.
     """
     if not label:
         return ADDON_ICON
-    bundled = os.path.join(ADDON_PATH, 'resources', 'images', 'genres',
-                           '{}.png'.format(label.strip()))
-    return bundled if os.path.exists(bundled) else ADDON_ICON
+
+    # Normalize accents to ASCII so 'En Espa\u00f1ol' -> 'En Espanol' matches
+    # the on-disk filename which is ASCII-safe.  Lowercase early so the
+    # subsequent connector substitutions match regardless of input case
+    # ('NEWS AND OPINION' and 'News and Opinion' both reach the same target).
+    import unicodedata
+    base = unicodedata.normalize('NFKD', label).encode('ascii', 'ignore').decode('ascii')
+    base = base.strip().lower()
+    if not base:
+        return ADDON_ICON
+
+    # Build candidate label spellings (all lowercase).
+    candidates = []
+    seen = set()
+    def add(s):
+        s = s.strip()
+        if s and s not in seen:
+            seen.add(s)
+            candidates.append(s)
+
+    add(base)
+    add(base.replace('+', '&'))
+    add(base.replace('&', '+'))
+    add(base.replace(' and ', ' & '))
+    add(base.replace(' & ', ' and '))
+    # Plural fall-through: 'westerns' -> 'western'
+    if base.endswith('s') and len(base) > 2:
+        add(base[:-1])
+
+    # Case-insensitive lookup against the actual files in the genres dir.
+    icons_dir = os.path.join(ADDON_PATH, 'resources', 'images', 'genres')
+    try:
+        existing = {fn.lower(): fn for fn in os.listdir(icons_dir)}
+    except OSError:
+        return ADDON_ICON
+
+    for cand in candidates:
+        target = '{}.png'.format(cand)
+        if target in existing:
+            return os.path.join(icons_dir, existing[target])
+
+    return ADDON_ICON
 
 
 # ---------------------------------------------------------------------------
@@ -1165,90 +1279,49 @@ def _tag_episode(li, title, series_name='', season_num=0, ep_num=0,
 # ---------------------------------------------------------------------------
 
 def list_root(update_listing=False):
+    """v4.0.0 root menu — four entries, kept clean.
+
+      Movies   - Xtream Codes VOD movies catalog
+      Series   - Xtream Codes VOD series catalog
+      Stream   - Live Wrestling, Wrestling Rewind, WoD, FoD, all Pluto USA categories
+      Tools    - Backup / Restore / Refresh-Cache utilities
+
+    Top-level icons use the bundled genre-icon system.  These will look
+    placeholder-ish in skins that show a preview pane (the band-with-text
+    template is fine in list rows but small in poster panels) — Echo plans
+    to revisit with hand-drawn icons later.  Until then, consistency
+    matters more than polish.
+    """
     xbmcplugin.setPluginCategory(HANDLE, 'Echo OnDemand')
     # 'addons' suppresses the episode info panel (control 8001 in View_50_List.xml)
     # which shows for 'videos' content and leaves an empty text box below the icon.
     # 'addons' renders the addon icon cleanly in the simple poster panel instead.
     xbmcplugin.setContent(HANDLE, 'addons')
 
+    icon = _menu_icon('Movies')
     li = xbmcgui.ListItem(label='Movies', offscreen=True)
-    li.setArt({'icon': ADDON_ICON, 'thumb': ADDON_ICON, 'fanart': ADDON_FANART})
+    li.setArt({'icon': icon, 'thumb': icon, 'fanart': ADDON_FANART})
     xbmcplugin.addDirectoryItem(HANDLE, build_url(mode='movie_cats'), li, isFolder=True)
 
+    icon = _menu_icon('Series')
     li = xbmcgui.ListItem(label='Series', offscreen=True)
-    li.setArt({'icon': ADDON_ICON, 'thumb': ADDON_ICON, 'fanart': ADDON_FANART})
+    li.setArt({'icon': icon, 'thumb': icon, 'fanart': ADDON_FANART})
     xbmcplugin.addDirectoryItem(HANDLE, build_url(mode='series_cats'), li, isFolder=True)
 
-    # Wrestling Rewind — single feed URL drives the whole tree.
-    # Soft-coded: settings 'wr_root_url' overrides the default if present
-    # (see HANDOFF.md re: pointing at a mirror without a code change).
-    # Renamed from plain 'Wrestling' in v3.0.0 — three replay sources now
-    # sit alongside each other at the root level for honest labelling.
-    wr_root = ADDON.getSetting('wr_root_url').strip()
-    if not wr_root:
-        wr_root = 'https://mylostsoulspace.co.uk/WrestlingRewind/xmls/wrestlingrewind-main.xml'
-    li = xbmcgui.ListItem(label='Wrestling Rewind', offscreen=True)
-    li.setArt({'icon': ADDON_ICON, 'thumb': ADDON_ICON, 'fanart': ADDON_FANART})
-    xbmcplugin.addDirectoryItem(
-        HANDLE,
-        build_url(mode='wr_list', wr_url=wr_root, wr_title='Wrestling Rewind'),
-        li, isFolder=True
-    )
+    # Stream — Live Wrestling + Wrestling Rewind + WoD + FoD + all Pluto USA
+    # categories.  See list_stream() for the full layout.  Replaces the v3.x
+    # arrangement where WR / WoD / FoD sat at the top level alongside Live.
+    icon = _menu_icon('Stream')
+    li = xbmcgui.ListItem(label='Stream', offscreen=True)
+    li.setArt({'icon': icon, 'thumb': icon, 'fanart': ADDON_FANART})
+    xbmcplugin.addDirectoryItem(HANDLE, build_url(mode='list_stream'), li, isFolder=True)
 
-    # Wrestling on Demand — curated tree from STATIC_MENUS['wod_root'].
-    # WWE / Other Promotions / Documentaries / etc.  No live content.
-    li = xbmcgui.ListItem(label='Wrestling on Demand', offscreen=True)
-    li.setArt({'icon': ADDON_ICON, 'thumb': ADDON_ICON, 'fanart': ADDON_FANART})
-    xbmcplugin.addDirectoryItem(
-        HANDLE,
-        build_url(mode='static_menu', key='wod_root', title='Wrestling on Demand'),
-        li, isFolder=True
-    )
-
-    # Fights on Demand — curated tree from STATIC_MENUS['fod_root'].
-    # UFC / MMA / Boxing, including a Free (No Debrid) sub-menu.
-    li = xbmcgui.ListItem(label='Fights on Demand', offscreen=True)
-    li.setArt({'icon': ADDON_ICON, 'thumb': ADDON_ICON, 'fanart': ADDON_FANART})
-    xbmcplugin.addDirectoryItem(
-        HANDLE,
-        build_url(mode='static_menu', key='fod_root', title='Fights on Demand'),
-        li, isFolder=True
-    )
-
-    # Live — Live Wrestling (static, WOD's live.xml feed) plus all USA Pluto
-    # categories rendered dynamically from mjh's catalog.  See list_live().
-    li = xbmcgui.ListItem(label='Live', offscreen=True)
-    li.setArt({'icon': ADDON_ICON, 'thumb': ADDON_ICON, 'fanart': ADDON_FANART})
-    xbmcplugin.addDirectoryItem(
-        HANDLE,
-        build_url(mode='list_live'),
-        li, isFolder=True
-    )
-
-    # Settings backup / restore — both pinned to the bottom alongside Refresh.
-    # SpecialSort=bottom keeps them out of the way; new in v3.0.0 as a safety
-    # net for users who fully uninstall + reinstall (which wipes Kodi's
-    # per-addon userdata).  Backup writes to special://userdata/, one level
-    # above the addon's profile dir, so it survives addon uninstall.
-    li = xbmcgui.ListItem(label='Backup Settings', offscreen=True)
-    li.setArt({'icon': ADDON_ICON, 'fanart': ADDON_FANART})
-    li.setProperty('SpecialSort', 'bottom')
-    xbmcplugin.addDirectoryItem(
-        HANDLE, build_url(mode='settings_backup'), li, isFolder=False
-    )
-
-    li = xbmcgui.ListItem(label='Restore Settings', offscreen=True)
-    li.setArt({'icon': ADDON_ICON, 'fanart': ADDON_FANART})
-    li.setProperty('SpecialSort', 'bottom')
-    xbmcplugin.addDirectoryItem(
-        HANDLE, build_url(mode='settings_restore'), li, isFolder=False
-    )
-
-    # Pinned to bottom of the list so it stays out of the way.
-    li = xbmcgui.ListItem(label='Refresh / Clear Cache', offscreen=True)
-    li.setArt({'icon': ADDON_ICON, 'fanart': ADDON_FANART})
-    li.setProperty('SpecialSort', 'bottom')
-    xbmcplugin.addDirectoryItem(HANDLE, build_url(mode='refresh'), li, isFolder=True)
+    # Tools — Backup / Restore / Refresh-Cache.  Pulled out of the root in
+    # v4.0.0 so the main menu is clean (4 entries).  See list_tools().
+    icon = _menu_icon('Tools')
+    li = xbmcgui.ListItem(label='Tools', offscreen=True)
+    li.setArt({'icon': icon, 'thumb': icon, 'fanart': ADDON_FANART})
+    xbmcplugin.addDirectoryItem(HANDLE, build_url(mode='list_tools'), li, isFolder=True)
 
     xbmcplugin.endOfDirectory(HANDLE, updateListing=update_listing)
 
@@ -1806,23 +1879,32 @@ def _parse_iso_to_epoch(s):
     return calendar.timegm(tm)
 
 
-def list_live():
-    """Render the Live category root.
+def list_stream():
+    """Render the Stream root menu (v4.0.0 — replaces v3.x list_live).
 
-    Top: Live Wrestling (static — WOD's live.xml feed).
-    Below: One folder per Pluto USA channel group (Sports, News,
-    Entertainment, etc.), discovered from mjh's catalog.  Folders are
-    rendered in alphabetical order.
+    Static block at the top (in this fixed order — chosen for "live first,
+    then replays" flow):
+
+      1. Live Wrestling            (WOD's live.xml feed)
+      2. Wrestling Rewind          (mylostsoulspace.co.uk feed)
+      3. Wrestling on Demand       (STATIC_MENUS['wod_root'])
+      4. Fights on Demand          (STATIC_MENUS['fod_root'])
+
+    Below that: Pluto USA channel groups in alphabetical order, discovered
+    from mjh's catalog (Sports, News, Entertainment, ...).
 
     If the catalog fetch fails (mjh down, no network), only the static
-    Live Wrestling entry shows.  A friendly notification surfaces the
-    failure but doesn't block.
+    block shows.  A friendly notification surfaces the failure but doesn't
+    block — Live Wrestling and the curated WoD/FoD trees still work
+    independently of the catalog.
     """
-    xbmcplugin.setPluginCategory(HANDLE, 'Echo OnDemand \u2014 Live')
+    xbmcplugin.setPluginCategory(HANDLE, 'Echo OnDemand \u2014 Stream')
     xbmcplugin.setContent(HANDLE, 'files')
 
-    # Static section — STATIC_MENUS['live_root'] (currently just Live Wrestling).
-    # Iterating it instead of hardcoding lets future additions land cleanly.
+    # ----- Static block: Live Wrestling + WR + WoD + FoD ----------
+
+    # Live Wrestling — STATIC_MENUS['live_root'] (one entry; iterating
+    # rather than hardcoding lets future additions land cleanly).
     for entry in STATIC_MENUS.get('live_root', []):
         title     = entry.get('title', 'Unknown')
         icon_path = _menu_icon(entry.get('icon_label', ''))
@@ -1832,11 +1914,45 @@ def list_live():
             target = build_url(mode='wr_list', wr_url=entry['wr_url'], wr_title=title)
             xbmcplugin.addDirectoryItem(HANDLE, target, li, isFolder=True)
 
-    # Dynamic section — Pluto USA categories from mjh's catalog.
+    # Wrestling Rewind — single feed URL drives the whole tree.
+    # Soft-coded: settings 'wr_root_url' overrides the default if present
+    # (see HANDOFF.md re: pointing at a mirror without a code change).
+    wr_root = ADDON.getSetting('wr_root_url').strip()
+    if not wr_root:
+        wr_root = 'https://mylostsoulspace.co.uk/WrestlingRewind/xmls/wrestlingrewind-main.xml'
+    icon = _menu_icon('Wrestling')   # generic Wrestling.png — covers WR root
+    li = xbmcgui.ListItem(label='Wrestling Rewind', offscreen=True)
+    li.setArt({'icon': icon, 'thumb': icon, 'fanart': ADDON_FANART})
+    xbmcplugin.addDirectoryItem(
+        HANDLE,
+        build_url(mode='wr_list', wr_url=wr_root, wr_title='Wrestling Rewind'),
+        li, isFolder=True
+    )
+
+    # Wrestling on Demand — curated tree from STATIC_MENUS['wod_root'].
+    icon = _menu_icon('Wrestling on Demand')
+    li = xbmcgui.ListItem(label='Wrestling on Demand', offscreen=True)
+    li.setArt({'icon': icon, 'thumb': icon, 'fanart': ADDON_FANART})
+    xbmcplugin.addDirectoryItem(
+        HANDLE,
+        build_url(mode='static_menu', key='wod_root', title='Wrestling on Demand'),
+        li, isFolder=True
+    )
+
+    # Fights on Demand — curated tree from STATIC_MENUS['fod_root'].
+    icon = _menu_icon('Fights on Demand')
+    li = xbmcgui.ListItem(label='Fights on Demand', offscreen=True)
+    li.setArt({'icon': icon, 'thumb': icon, 'fanart': ADDON_FANART})
+    xbmcplugin.addDirectoryItem(
+        HANDLE,
+        build_url(mode='static_menu', key='fod_root', title='Fights on Demand'),
+        li, isFolder=True
+    )
+
+    # ----- Dynamic block: Pluto USA channel groups ----------
+
     catalog = _catalog.get_catalog()
     if catalog is None:
-        # Network failure or parse error — pluto_catalog already logged it.
-        # Show a quiet user notification and end with what we have.
         xbmcgui.Dialog().notification(
             'Echo OnDemand',
             'Could not load Pluto channel catalog.',
@@ -1847,19 +1963,52 @@ def list_live():
 
     groups = _catalog.usa_groups(catalog)
     if not groups:
-        log('list_live: catalog has no USA channels', xbmc.LOGWARNING)
+        log('list_stream: catalog has no USA channels', xbmc.LOGWARNING)
         xbmcplugin.endOfDirectory(HANDLE)
         return
 
     for group_name in sorted(groups.keys(), key=str.lower):
-        count = groups[group_name]
+        count     = groups[group_name]
+        icon_path = _menu_icon(group_name)
         li = xbmcgui.ListItem(label=group_name, offscreen=True)
-        li.setArt({'icon': ADDON_ICON, 'thumb': ADDON_ICON, 'fanart': ADDON_FANART})
+        li.setArt({'icon': icon_path, 'thumb': icon_path, 'fanart': ADDON_FANART})
         li.getVideoInfoTag().setPlot(
             '{} channel{}'.format(count, '' if count == 1 else 's')
         )
         target = build_url(mode='pluto_chans', group=group_name)
         xbmcplugin.addDirectoryItem(HANDLE, target, li, isFolder=True)
+
+    xbmcplugin.endOfDirectory(HANDLE)
+
+
+def list_tools():
+    """Render the Tools menu — Backup / Restore / Refresh-Cache.
+
+    Pulled out of the v3.x root menu in v4.0.0 to keep the main menu
+    clean (Movies / Series / Stream / Tools).  Same actions, same routes
+    — only the navigation path changed.
+    """
+    xbmcplugin.setPluginCategory(HANDLE, 'Echo OnDemand \u2014 Tools')
+    xbmcplugin.setContent(HANDLE, 'files')
+
+    # Backup — writes settings + caches to special://userdata/, one level
+    # above the addon's profile dir, so it survives addon uninstall.
+    icon = _menu_icon('Tools')
+    li = xbmcgui.ListItem(label='Backup Settings', offscreen=True)
+    li.setArt({'icon': icon, 'thumb': icon, 'fanart': ADDON_FANART})
+    xbmcplugin.addDirectoryItem(
+        HANDLE, build_url(mode='settings_backup'), li, isFolder=False
+    )
+
+    li = xbmcgui.ListItem(label='Restore Settings', offscreen=True)
+    li.setArt({'icon': icon, 'thumb': icon, 'fanart': ADDON_FANART})
+    xbmcplugin.addDirectoryItem(
+        HANDLE, build_url(mode='settings_restore'), li, isFolder=False
+    )
+
+    li = xbmcgui.ListItem(label='Refresh / Clear Cache', offscreen=True)
+    li.setArt({'icon': icon, 'thumb': icon, 'fanart': ADDON_FANART})
+    xbmcplugin.addDirectoryItem(HANDLE, build_url(mode='refresh'), li, isFolder=True)
 
     xbmcplugin.endOfDirectory(HANDLE)
 
@@ -2033,6 +2182,16 @@ def list_wr(wr_url, wr_title='Wrestling Rewind'):
     xbmcplugin.setPluginCategory(HANDLE, 'Echo OnDemand \u2014 {}'.format(wr_title))
     xbmcplugin.setContent(HANDLE, 'files')
 
+    # Detect whether this is a Wrestling Rewind feed.  Used for two
+    # behavioral overrides (v4.0.0):
+    #   1) Filter out the upstream "Settings" entry that WR's own XML
+    #      includes (it's an internal/admin link, not a watchable feed).
+    #   2) Force ADDON_FANART for every item so the background stays
+    #      consistent as the user navigates.  WR's per-item fanart
+    #      varies wildly between sections, which causes flicker.
+    # WoD and FoD are unaffected — they keep using item-level fanart.
+    is_wr = 'wrestlingrewind' in (wr_url or '').lower()
+
     for item in items:
         item_type = item.get('type', 'item')
         raw_title = item.get('title', 'Unknown')
@@ -2042,16 +2201,29 @@ def list_wr(wr_url, wr_title='Wrestling Rewind'):
         title     = _wr.strip_format_tags(raw_title) or 'Unknown'
         raw_link  = item.get('link', '')
 
+        # WR-only: skip the upstream "Settings" entry.  Match on the
+        # cleaned title (case-insensitive) so any BBCode wrapping is
+        # already removed.  Restricted to WR feeds so a WoD/FoD feed
+        # legitimately containing a "Settings" entry wouldn't be hidden.
+        if is_wr and title.strip().lower() == 'settings':
+            log('list_wr: filtering WR Settings entry', xbmc.LOGINFO)
+            continue
+
         # Skip ANY entry with an empty link — for dir items they'd navigate
         # to a broken URL, for item-type they'd hit "No playable link" on click.
         if not raw_link:
-            log('list_wr: skipping {} "{}" — empty link'.format(
+            log('list_wr: skipping {} "{}" \u2014 empty link'.format(
                 item_type, title), xbmc.LOGWARNING)
             continue
 
         # Pick item-level art when present, addon defaults otherwise.
+        # WR exception: always use ADDON_FANART for fanart consistency
+        # (item-level fanart varies and causes background flicker).
         thumb_url  = (item.get('thumbnail') or '').strip() or ADDON_ICON
-        fanart_url = (item.get('fanart')    or '').strip() or ADDON_FANART
+        if is_wr:
+            fanart_url = ADDON_FANART
+        else:
+            fanart_url = (item.get('fanart') or '').strip() or ADDON_FANART
         summary    = (item.get('summary')   or '').strip()
 
         li = xbmcgui.ListItem(label=title, offscreen=True)
@@ -2429,8 +2601,10 @@ def router(paramstring):
         list_static_menu(menu_key, menu_title)
     elif mode == 'play_pluto':
         play_pluto(channel_id, menu_title)
-    elif mode == 'list_live':
-        list_live()
+    elif mode == 'list_stream':
+        list_stream()
+    elif mode == 'list_tools':
+        list_tools()
     elif mode == 'pluto_chans':
         list_pluto_channels(group_name)
     elif mode == 'settings_backup':
