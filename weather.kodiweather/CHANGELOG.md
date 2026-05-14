@@ -2,6 +2,19 @@
 
 All notable changes to weather.kodiweather.
 
+## [2.4.11] - 2026-05-13
+
+### Fixed — Root cause of resources/34/ folder error (and all equivalent redirected codes)
+
+**Root cause confirmed from Kodi debug.log:** `XFILE::CDirectory::GetDirectory - Error getting ...resources/34/`. Folder 34 does not exist in the fanart pack (consolidated into 32 via `map_fanart`). The folder `34` was being requested because the skin's home screen builds its fanart background path from `current.outlookicon` — stripping the `.png` extension to get the folder number — rather than from `current.fanartcode`. The `fanartcode` property correctly went through `get_fanart_folder` (34→32); the `outlookicon` property did not, leaving a raw unreduced code that the skin used as a directory name.
+
+- **lib/utils.py** (`unit == 'image'`, non-day branch): `current.outlookicon`, `hourly.X.outlookicon`. Previously set to bare `{raw_kodi_code}.png` (e.g. `34.png`). Now routes through `get_fanart_folder` so the emitted value matches the existing fanart folder (e.g. `32.png`). The `resource.images.weathericons.default` pack contains icons for both 32 and 34, so the redirected number is still a valid icon for that pack.
+- **lib/utils.py** (TimeOfDay block — 9 inline setters): `daily.X.overview.outlookicon`, `daily.X.outlookicon`, `day{N}.outlookicon`, `timeofday.X.outlookicon`, `daily.X.{tod}.outlookicon`, and all corresponding `maxoutlookicon` variants. All now use `safe_fanart_code() or map_wmo.get()` so any property potentially used as a directory name carries only a folder that exists in the pack.
+
+### Notes
+
+- `day{N}.outlookicon` (the `day`-target, full `resource://resource.images.weathericons.default/...` URI) is intentionally left using the raw Kodi code in `unit == 'image'`'s day-branch: it carries a full absolute path, not a bare number, so the skin engine never interprets it as a fanart folder name.
+- The only `map_wmo` reference now remaining in the property-setting layer outside of the `code` and `image` unit handlers is the `day`-target URI on line 275. All bare-number outputs that could be interpreted as folder names are redirected through `safe_fanart_code`.
 ## [2.4.10] - 2026-05-13
 
 ### Fixed — Fanart folder redirect None-propagation
