@@ -2,6 +2,18 @@
 
 All notable changes to weather.kodiweather.
 
+## [2.4.10] - 2026-05-13
+
+### Fixed — Fanart folder redirect None-propagation
+
+- **lib/config.py**: `get_fanart_folder()` had no guard for `None` input. If `map_wmo.get(...)` returned `None` for an unknown WMO code, the value propagated through `map_fanart.get(None, None)` = `None`, then `str(None)` = `'None'`, and Kodi set the `fanartcode` window property to the string `'None'`. The skin then tried to open `resources/None/`, logging errors. Added early `if code is None: return None`.
+- **lib/config.py**: Added `safe_fanart_code(wmo_code, isday)` helper that encapsulates both `map_wmo` and `map_fanart` lookups with explicit None guards. Returns `None` on any miss (caller uses `or ''`). Replaces five scattered inline `config.get_fanart_folder(config.map_wmo.get(...))` one-liners throughout `utils.py`.
+- **lib/utils.py**: All five inline `get_fanart_folder(map_wmo.get(...))` calls in the TimeOfDay and daily-per-segment blocks migrated to `safe_fanart_code(...) or ''`.
+- **lib/utils.py** (`unit == 'code'` in `getprop()`): Same None-propagation fixed. Now raises `TypeError` with a diagnostic message at each missing step so `setmap`'s existing handler sets the property to `''` instead of `'None'`.
+
+### Fixed — `maxoutlookicon` showed wrong icon
+
+- **lib/utils.py** (lines 651, 655): `daily.X.overview.maxoutlookicon` and `daily.X.maxoutlookicon` were built with `code` (modal condition) instead of `mcode` (most severe condition). The property is only written when `mcode > code`, so the displayed icon was always wrong in that branch.
 ## [2.4.9] - 2026-05-07
 
 ### Fixed — Black weather background race conditions

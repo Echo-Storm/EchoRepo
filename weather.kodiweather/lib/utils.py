@@ -276,7 +276,12 @@ def getprop(data, map, idx, count):
 		else:
 			content = f'{config.map_wmo.get(f"{content}{isday}")}.png'
 	elif unit == 'code':
-		content = config.get_fanart_folder(config.map_wmo.get(f'{content}{isday}'))
+		kodi_code = config.map_wmo.get(f'{content}{isday}')
+		if kodi_code is None:
+			raise TypeError(f'No map_wmo entry for WMO code {content!r} isday={isday!r}')
+		content = config.get_fanart_folder(kodi_code)
+		if content is None:
+			raise TypeError(f'No map_fanart entry for kodi_code {kodi_code}')
 	elif unit == 'date':
 		content = dt('stamploc', content).strftime(config.kodi.date)
 	elif unit == 'time':
@@ -627,7 +632,7 @@ def getprop(data, map, idx, count):
 			addprop(f'daily.{idxtod3}.overview.outlook', config.localization.wmo.get(f'{code}d'))
 			addprop(f'daily.{idxtod3}.overview.outlookicon', f'{config.map_wmo.get(f"{code}d")}.png')
 			addprop(f'daily.{idxtod3}.overview.outlookiconwmo', f'{config.addon_icons}/{config.addon.icons}/{code}d.png')
-			addprop(f'daily.{idxtod3}.overview.fanartcode', config.get_fanart_folder(config.map_wmo.get(f"{code}d")))
+			addprop(f'daily.{idxtod3}.overview.fanartcode', config.safe_fanart_code(code, 'd') or '')
 			addprop(f'daily.{idxtod3}.overview.fanartcodewmo', f'{code}d')
 
 			# Overwrite forecast (personalized)
@@ -635,24 +640,24 @@ def getprop(data, map, idx, count):
 			addprop(f'daily.{idxtod3}.outlook', config.localization.wmo.get(f'{code}d'))
 			addprop(f'daily.{idxtod3}.outlookicon', f'{config.map_wmo.get(f"{code}d")}.png')
 			addprop(f'daily.{idxtod3}.outlookiconwmo', f'{config.addon_icons}/{config.addon.icons}/{code}d.png')
-			addprop(f'daily.{idxtod3}.fanartcode', config.get_fanart_folder(config.map_wmo.get(f"{code}d")))
+			addprop(f'daily.{idxtod3}.fanartcode', config.safe_fanart_code(code, 'd') or '')
 			addprop(f'daily.{idxtod3}.fanartcodewmo', f'{code}d')
 
 			addprop(f'day{idxtod3-1}.condition', config.localization.wmo.get(f'{code}d'))
 			addprop(f'day{idxtod3-1}.outlook', config.localization.wmo.get(f'{code}d'))
 			addprop(f'day{idxtod3-1}.outlookicon', f'resource://resource.images.weathericons.default/{config.map_wmo.get(f"{code}d")}.png')
 			addprop(f'day{idxtod3-1}.outlookiconwmo', f'{config.addon_icons}/{config.addon.icons}/{code}d.png')
-			addprop(f'day{idxtod3-1}.fanartcode', config.get_fanart_folder(config.map_wmo.get(f"{code}d")))
+			addprop(f'day{idxtod3-1}.fanartcode', config.safe_fanart_code(code, 'd') or '')
 			addprop(f'day{idxtod3-1}.fanartcodewmo', f'{code}d')
 
 			# Max outlook
 			if mcode > code:
 				addprop(f'daily.{idxtod3}.overview.maxoutlook', config.localization.wmo.get(f'{mcode}d'))
-				addprop(f'daily.{idxtod3}.overview.maxoutlookicon', f'{config.map_wmo.get(f"{code}d")}.png')
+				addprop(f'daily.{idxtod3}.overview.maxoutlookicon', f'{config.map_wmo.get(f"{mcode}d")}.png')
 				addprop(f'daily.{idxtod3}.overview.maxoutlookiconwmo', f'{config.addon_icons}/{config.addon.icons}/{mcode}d.png')
 
 				addprop(f'daily.{idxtod3}.maxoutlook', config.localization.wmo.get(f'{mcode}d'))
-				addprop(f'daily.{idxtod3}.maxoutlookicon', f'{config.map_wmo.get(f"{code}d")}.png')
+				addprop(f'daily.{idxtod3}.maxoutlookicon', f'{config.map_wmo.get(f"{mcode}d")}.png')
 				addprop(f'daily.{idxtod3}.maxoutlookiconwmo', f'{config.addon_icons}/{config.addon.icons}/{mcode}d.png')
 
 			else:
@@ -722,7 +727,7 @@ def getprop(data, map, idx, count):
 					addprop(f'timeofday.{idxtod}.outlook', config.localization.wmo.get(f'{code}{isday}'))
 					addprop(f'timeofday.{idxtod}.outlookicon', f'{config.map_wmo.get(f"{code}{isday}")}.png')
 					addprop(f'timeofday.{idxtod}.outlookiconwmo', f'{config.addon_icons}/{config.addon.icons}/{code}{isday}.png')
-					addprop(f'timeofday.{idxtod}.fanartcode', config.get_fanart_folder(config.map_wmo.get(f"{code}{isday}")))
+					addprop(f'timeofday.{idxtod}.fanartcode', config.safe_fanart_code(code, isday) or '')
 					addprop(f'timeofday.{idxtod}.fanartcodewmo', f'{code}{isday}')
 					addprop(f'timeofday.{idxtod}.temperature', temp)
 
@@ -746,7 +751,7 @@ def getprop(data, map, idx, count):
 				addprop(f'daily.{idxtod2}.{tod.get(t)}.outlook', config.localization.wmo.get(f'{code}{isday}'))
 				addprop(f'daily.{idxtod2}.{tod.get(t)}.outlookicon', f'{config.map_wmo.get(f"{code}{isday}")}.png')
 				addprop(f'daily.{idxtod2}.{tod.get(t)}.outlookiconwmo', f'{config.addon_icons}/{config.addon.icons}/{code}{isday}.png')
-				addprop(f'daily.{idxtod2}.{tod.get(t)}.fanartcode', config.get_fanart_folder(config.map_wmo.get(f"{code}{isday}")))
+				addprop(f'daily.{idxtod2}.{tod.get(t)}.fanartcode', config.safe_fanart_code(code, isday) or '')
 				addprop(f'daily.{idxtod2}.{tod.get(t)}.fanartcodewmo', f'{code}{isday}')
 				addprop(f'daily.{idxtod2}.{tod.get(t)}.temperature', temp)
 

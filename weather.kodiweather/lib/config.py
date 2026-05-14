@@ -429,8 +429,26 @@ map_fanart = {
 
 def get_fanart_folder(code):
 	"""Return the fanart folder for a given Yahoo weather code.
-	   Redirects clone codes to their master folder."""
+	   Redirects clone codes to their master folder.
+	   Returns None if code is None (caller should treat as no-data)."""
+	if code is None:
+		return None
 	return map_fanart.get(code, code)
+
+def safe_fanart_code(wmo_code, isday):
+	"""Convenience wrapper: WMO int + isday char -> fanart folder int.
+
+	Returns None (not a string) if either map lookup fails so the caller can
+	decide what fallback to use (typically '' for a Kodi window property).
+	This replaces the scattered inline pattern
+	  config.get_fanart_folder(config.map_wmo.get(f'{code}{isday}'))
+	which silently propagated None through both dicts and ended up setting
+	the Kodi property to the string 'None', causing skin lookup errors.
+	"""
+	kodi_code = map_wmo.get(f'{wmo_code}{isday}')
+	if kodi_code is None:
+		return None
+	return map_fanart.get(kodi_code, kodi_code)
 
 # Fanart background - stable image selection
 # Keyed by str(locid). Holds {'code': str, 'path': str} per location.
