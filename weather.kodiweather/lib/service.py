@@ -58,12 +58,9 @@ def Main():
 				if startup or utils.lastupdate('alert_notification') >= utils.setting('alert_interval', 'int') * 60:
 					utils.setupdate('alert_notification')
 
-					# Queue
-					for locid in range(1, config.addon.maxlocs):
-						if utils.monitor.abortRequested():
-							break
-						if utils.setting(f'loc{locid}') and utils.setting(f'loc{locid}alert', 'bool'):
-							weather.Main(str(locid), mode='msgqueue')
+					# Queue - alerts only for the currently selected location
+					if utils.setting(f'loc{current}') and utils.setting(f'loc{current}alert', 'bool'):
+						weather.Main(str(current), mode='msgqueue')
 
 					# Send
 					if not utils.monitor.abortRequested():

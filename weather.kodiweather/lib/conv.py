@@ -242,7 +242,7 @@ def distanceconv(value, unit):
 		if unit == 'km':
 			v = value / 1000
 		elif unit == 'mi':
-			v = value / 1609
+			v = value / 1609.344
 		else:
 			v = value
 
@@ -274,7 +274,7 @@ def precipconv(value, unit):
 		value = float(value)
 
 		if unit == 'in':
-			v = value * 0.039
+			v = value * 0.0393701
 		else:
 			v = value
 
@@ -390,7 +390,7 @@ def moonphase(deg):
 	# Coerce to int so float inputs don't fall through the discrete-equality
 	# boundary checks (358..2, 88..92, etc.) and return None.
 	try:
-		deg = int(round(float(deg)))
+		deg = int(round(float(deg))) % 360
 	except (TypeError, ValueError):
 		return ''
 
@@ -415,7 +415,7 @@ def moonphaseimage(deg):
 	# Same float-gap fix as moonphase(): coerce to int so non-integer
 	# inputs map cleanly to one of the eight phase images.
 	try:
-		deg = int(round(float(deg)))
+		deg = int(round(float(deg))) % 360
 	except (TypeError, ValueError):
 		return '0.png'
 

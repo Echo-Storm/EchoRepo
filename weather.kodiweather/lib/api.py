@@ -189,7 +189,7 @@ def getmap(map, head=False):
 
 # Map merge
 def mapmerge(map):
-	image = Image.new("RGBA", (756, 756), None)
+	image = Image.new("RGBA", (768, 768), None)
 
 	for item in map:
 

@@ -609,6 +609,7 @@ def getprop(data, map, idx, count):
 			fcstart = config.map_fcstart.get(config.addon.fcstart)
 			fcend   = config.map_fcend.get(config.addon.fcend)
 
+			l_full = list(l)  # full 24h window; used for worst-case daily card condition
 			l = l[fcstart:][:fcend]
 
 			# Skip day if no hourly data available (days beyond 72-hour window)
@@ -627,7 +628,8 @@ def getprop(data, map, idx, count):
 				code = mode(sorted(l, reverse=True))
 			except StatisticsError:
 				code = max(l)  # Fallback to most severe condition
-			mcode = max(l)
+			mcode      = max(l)
+			mcode_full = max(l_full)  # worst condition of the full 24h day
 			temp  = conv.temp(mean(ll))
 
 			addprop(f'daily.{idxtod3}.overview.date', dt('stamploc', date).strftime(config.kodi.date))
@@ -649,22 +651,22 @@ def getprop(data, map, idx, count):
 			addprop(f'daily.{idxtod3}.fanartcode', config.safe_fanart_code(code, 'd') or '')
 			addprop(f'daily.{idxtod3}.fanartcodewmo', f'{code}d')
 
-			addprop(f'day{idxtod3-1}.condition', config.localization.wmo.get(f'{code}d'))
-			addprop(f'day{idxtod3-1}.outlook', config.localization.wmo.get(f'{code}d'))
-			addprop(f'day{idxtod3-1}.outlookicon', f'resource://resource.images.weathericons.default/{config.safe_fanart_code(code, "d") or config.map_wmo.get(f"{code}d")}.png')
-			addprop(f'day{idxtod3-1}.outlookiconwmo', f'{config.addon_icons}/{config.addon.icons}/{code}d.png')
-			addprop(f'day{idxtod3-1}.fanartcode', config.safe_fanart_code(code, 'd') or '')
-			addprop(f'day{idxtod3-1}.fanartcodewmo', f'{code}d')
+			addprop(f'day{idxtod3-1}.condition', config.localization.wmo.get(f'{mcode_full}d'))
+			addprop(f'day{idxtod3-1}.outlook', config.localization.wmo.get(f'{mcode_full}d'))
+			addprop(f'day{idxtod3-1}.outlookicon', f'resource://resource.images.weathericons.default/{config.safe_fanart_code(mcode_full, "d") or config.map_wmo.get(f"{mcode_full}d")}.png')
+			addprop(f'day{idxtod3-1}.outlookiconwmo', f'{config.addon_icons}/{config.addon.icons}/{mcode_full}d.png')
+			addprop(f'day{idxtod3-1}.fanartcode', config.safe_fanart_code(mcode_full, 'd') or '')
+			addprop(f'day{idxtod3-1}.fanartcodewmo', f'{mcode_full}d')
 
-			# Max outlook
-			if mcode > code:
-				addprop(f'daily.{idxtod3}.overview.maxoutlook', config.localization.wmo.get(f'{mcode}d'))
-				addprop(f'daily.{idxtod3}.overview.maxoutlookicon', f'{config.safe_fanart_code(mcode, "d") or config.map_wmo.get(f"{mcode}d")}.png')
-				addprop(f'daily.{idxtod3}.overview.maxoutlookiconwmo', f'{config.addon_icons}/{config.addon.icons}/{mcode}d.png')
+			# Max outlook — full-day worst vs personalized-window typical
+			if mcode_full > code:
+				addprop(f'daily.{idxtod3}.overview.maxoutlook', config.localization.wmo.get(f'{mcode_full}d'))
+				addprop(f'daily.{idxtod3}.overview.maxoutlookicon', f'{config.safe_fanart_code(mcode_full, "d") or config.map_wmo.get(f"{mcode_full}d")}.png')
+				addprop(f'daily.{idxtod3}.overview.maxoutlookiconwmo', f'{config.addon_icons}/{config.addon.icons}/{mcode_full}d.png')
 
-				addprop(f'daily.{idxtod3}.maxoutlook', config.localization.wmo.get(f'{mcode}d'))
-				addprop(f'daily.{idxtod3}.maxoutlookicon', f'{config.safe_fanart_code(mcode, "d") or config.map_wmo.get(f"{mcode}d")}.png')
-				addprop(f'daily.{idxtod3}.maxoutlookiconwmo', f'{config.addon_icons}/{config.addon.icons}/{mcode}d.png')
+				addprop(f'daily.{idxtod3}.maxoutlook', config.localization.wmo.get(f'{mcode_full}d'))
+				addprop(f'daily.{idxtod3}.maxoutlookicon', f'{config.safe_fanart_code(mcode_full, "d") or config.map_wmo.get(f"{mcode_full}d")}.png')
+				addprop(f'daily.{idxtod3}.maxoutlookiconwmo', f'{config.addon_icons}/{config.addon.icons}/{mcode_full}d.png')
 
 			else:
 				addprop(f'daily.{idxtod3}.overview.maxoutlook', '')
