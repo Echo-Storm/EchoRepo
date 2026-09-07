@@ -1,251 +1,312 @@
-# Echo OnDemand
-**Kodi plugin for browsing and playing VOD content from an Xtream Codes IPTV service.**
+# Echo OnDemand — Kodi Video Plugin
 
-Version 1.3.3 · Kodi Omega (v21) · Python 3 · Provider: Echo-Storm
+**Version:** 3.1.0
+**Platform:** Kodi Omega (v21) — Windows, Linux, macOS, Android
+**Developer:** Echo-Storm
+
+---
+
+## What It Does
+
+Echo OnDemand is a private Kodi addon that provides access to six content sources from a single root menu:
+
+- **Movies** — browse by genre, search by title or year, play via Xtream Codes IPTV
+- **Series** — full season and episode navigation via Xtream Codes IPTV
+- **Wrestling Rewind** — Wrestling Rewind replays and PPV events via debrid
+- **Wrestling on Demand** — WWE (RAW, SmackDown, NXT, WrestleMania, PPV), AEW, TNA, NWA, NJPW, ROH, RPW, Indy, plus documentaries, interviews, special matches, archive
+- **Fights on Demand** — UFC (PPV, Fight Night, ESPN/ABC/FOX/FUEL, Classic, Shows), MMA, Boxing, including a Free / No Debrid sub-menu
+- **Live** — Live Wrestling (24/7 channels from WOD's `live.xml`) and Sports Streams (curated Pluto TV themed sports channels: Golf Central, F1, UFC, Bellator, ONE, Top Rank Classics, DAZN Ringside)
+
+Plus three menu actions: **Backup Settings**, **Restore Settings**, and **Refresh / Clear Cache**.
+
+Designed for a small, known user group (~4 installs). Not publicly distributed.
 
 ---
 
 ## Requirements
 
-- Kodi 20 (Nexus) or 21 (Omega) — developed and tested on Omega v21.3
-- An active Xtream Codes-compatible IPTV subscription
-- The service must support `player_api.php` (standard Xtream Codes API)
+| Component | Required | Notes |
+|---|---|---|
+| Kodi 21 (Omega) | Yes | Python 3 required |
+| Xtream Codes IPTV service | For Movies/Series | Not needed for replay/live sections |
+| `script.module.resolveurl` | Yes | Hard dependency — install via repo |
+| Active debrid account (Real-Debrid etc.) | Recommended | Configure in resolveurl settings; FOD has a Free / No Debrid sub-menu for users without one |
+| TMDB API key | No | Optional — enables movie backdrop art |
+
+The replay and live sections are accessible without IPTV credentials. Movies and Series will prompt for credentials if not set.
 
 ---
 
 ## Installation
 
-1. Download `plugin.video.echoondemand-x.x.x.zip`
-2. In Kodi: **Add-ons → Install from zip file** → select the zip
-3. Open the addon and go to **Settings**
-4. Enter your IPTV **Username** and **Password**
-5. Browse Movies or Series
+Install as a zip file via Kodi's Add-on Manager:
 
-The addon does not require any repository. It installs standalone from the zip.
+1. Settings → Add-ons → Install from zip file
+2. Select `plugin_video_echoondemand-3_1_0.zip`
+3. Open the addon and enter your Xtream Codes username and password in Settings
+
+Ensure `script.module.resolveurl` is already installed before enabling the addon.
+
+### Upgrading from a previous version
+
+**Important:** if you want your settings (username/password/etc.) to persist, install the new zip OVER the existing addon. Don't uninstall first.
+
+- ✅ **Install from zip → pick new zip** → Kodi treats this as an update. Your `userdata/addon_data/plugin.video.echoondemand/settings.xml` is left alone.
+- ❌ **Uninstall the addon first → then Install from zip** → Kodi wipes the addon's userdata folder. Settings are lost.
+
+If you've ever lost settings between versions, that's why. v3.0.0 adds a **Backup Settings / Restore Settings** pair as a safety net (see below) — so even if you do uninstall+reinstall, you can get your credentials back in one click.
 
 ---
 
 ## Settings
 
-| Setting | Description | Default |
-|---|---|---|
-| Username | Your Xtream Codes service username | — |
-| Password | Your Xtream Codes service password | — |
-| Pre-buffer seconds | Pause after stream starts before playing. Helps with unstable streams. Set to 0 to disable. | 5 |
-| TMDB API Key | Optional. Free key from themoviedb.org. Enables movie backdrop art fetched and cached at play time. | — |
+| Setting | Purpose |
+|---|---|
+| Username | Xtream Codes username |
+| Password | Xtream Codes password |
+| Pre-buffer seconds | Seconds to pause before playback begins (0 = disabled). Gives Kodi's buffer time to fill before the first frame. |
+| TMDB API key | Optional. When present, fetches and caches movie backdrops after each play. Free key from themoviedb.org. |
+| Use Pluto TV resolver | Default on. Resolves Pluto channels with a fresh session at play time. Turn off only if Pluto changes their boot API and the resolver starts failing — the addon will fall back to the original (potentially stale) URLs from the upstream feed. |
 
-### Getting a TMDB API key (optional)
-1. Register at [themoviedb.org](https://www.themoviedb.org)
-2. Settings → API → Request an API key (v3 auth) — free, takes 2 minutes
-3. Paste the key into addon Settings
-4. Backdrop art is fetched during the pre-buffer window the first time each movie is played, then cached permanently — zero impact on list loading
+No source-specific settings are exposed. Feed root URLs are hardcoded in `default.py` (one constant per source). The Wrestling Rewind root URL can be overridden via a `wr_root_url` setting if added to settings.xml manually; WOD, FOD, and Live roots are static category trees defined in `STATIC_MENUS` near the top of `default.py`.
 
----
+### Backup / Restore Settings (new in 3.0.0)
 
-## Features
+Two root menu entries write and read a JSON snapshot of all four user settings to `special://userdata/echoondemand_settings.json`. This file lives **one level up** from the addon's own userdata directory and is not affected when Kodi cleans up the addon's userdata on uninstall.
 
-### Movies
-- Browse by genre category with bundled colour-coded genre icons
-- Metadata: title, year, rating, plot, cast, director, genre, runtime — all sourced from the IPTV provider API
-- Context menu: Mark as Watched, Movie Information, Add to Queue
-- Sort by: Title, Year, Rating
-- TMDB backdrop art (optional, populated lazily at play time)
+- **Backup Settings** — writes the snapshot (no confirmation, takes a moment, shows a notification on success).
+- **Restore Settings** — reads the snapshot, confirms with a yes/no dialog, then writes each value back via `ADDON.setSetting()`. The file's `version` field is checked; backups from a future addon version are refused rather than silently corrupting the schema.
 
-### Series
-- Browse by genre category
-- Full season and episode navigation
-- Series backdrop art carried through to season and episode views
-- Metadata: title, year, rating, plot, cast, director, genre, episode runtime
-- Episode metadata: title, plot, duration, episode/season numbers
-- Context menu: Mark as Watched / Episode Information / Add to Queue (episodes), Show Information (series)
-- Sort by: Title, Year, Rating (series); Episode number (episodes)
-
-### General
-- All results cached locally — categories 1 hour, stream lists 30 min, series info 1 hour
-- Cache cleared via **Refresh / Clear Cache** in the root menu (also clears TMDB fanart cache)
-- Pre-buffer: stream starts, pauses silently for configured seconds, resumes automatically
-- 99 bundled genre icons, colour-coded by type (Action=red, Comedy=yellow, Horror=dark red, Sci-Fi=blue, etc.) — 39 original genre icons plus 60 covering streaming services, networks, and international/chart categories
-- Series fanart (backdrop_path) carries through to season and episode views
-- Movies: TMDB backdrop if cached, otherwise addon default fanart
-- Fully Omega-compatible: InfoTagVideo API, xbmc.Actor cast objects, getCondVisibility for pause detection
+Take a backup any time you've configured the addon to your liking. The file is small (a few hundred bytes) and human-readable.
 
 ---
 
-## Companion Skin Edit (MyVideoNav.xml)
+## Content Sources
 
-A matching edit to `MyVideoNav.xml` in the Aeon Nox Silvo EchoStorm Edition skin adds a **plot synopsis overlay** above the poster panel, visible only when browsing Echo OnDemand.
+### Movies and Series (Xtream Codes IPTV)
 
-Features of the overlay:
-- Locked to `plugin.video.echoondemand` via `Container.PluginName` — does not appear in any other addon
-- Positioned above the poster in the clear space below the topbar (1920×1080 virtual coordinates)
-- 82% opaque dark backing, white `font12` text
-- Auto-scrolls through long synopses: 1.5s delay, 4s scroll, 5.5s loop
-- Visible only for movies, TV shows, and episodes with a non-empty plot
+Stream URLs are built at play time from the configured server:
+```
+Movie:   https://<server>/movie/<user>/<pass>/<vod_id>.<ext>
+Episode: https://<server>/series/<user>/<pass>/<episode_id>.<ext>
+```
 
-The `ScriptHelperFlags` grouplist was also widened from 340px to 480px in the same file to give the rating helper scripts (RT, Audience Score, TMDB) room to display simultaneously without displacement.
+The server address is hardcoded in `default.py` (`SERVER` constant). To point the addon at a different server, change that one line.
+
+### Wrestling Rewind (via debrid)
+
+Content comes from a remote MicroJen XML/JSON feed at `mylostsoulspace.co.uk/WrestlingRewind/`. The feed describes a directory tree of wrestling shows and events. Each leaf item contains one or more candidate links (magnet URIs and/or direct HTTP hosters).
+
+### Wrestling on Demand (WOD via debrid)
+
+Content comes from MicroJen XML feeds at `l3grthu.com/hades/wod21/`. The upstream service does not provide a single master menu XML, so the menu structure is curated in `STATIC_MENUS['wod_root']` and its sub-menus (`wod_wwe`, `wod_other`). Each leaf is a directory item that hands off to the standard MicroJen feed walker.
+
+### Fights on Demand (FOD via debrid)
+
+Content comes from MicroJen XML feeds at `mylostsoulspace.co.uk/FightsOnDemand/`. Same hosting domain as Wrestling Rewind. The menu is curated in `STATIC_MENUS['fod_root']` (Latest, UFC Events, MMA, Boxing, Free) with a UFC sub-menu (`fod_ufc`) and Free / No Debrid sub-menu (`fod_free`).
+
+The Free sub-menu points at the upstream's nondebrid feeds for users without a debrid account.
+
+### Live (expanded in 3.1.0)
+
+Two sub-categories:
+
+- **Live Wrestling** — walks WOD's `live.xml` feed (24/7 wrestling channels). Channels are dynamic; the upstream service adds and removes them.
+- **Sports Streams** — curated list of Pluto TV themed sports channels (Golf Central, F1, UFC, Bellator MMA, ONE Championship, Top Rank Classics, DAZN Ringside). The list lives in `STATIC_MENUS['live_sports']` in `default.py` — adding a channel is a one-line edit (find the channel ID in the URL bar of `pluto.tv/us/live-tv/<id>` and add an entry).
+
+Both sub-categories resolve through `resources/lib/pluto.py`, which fetches a fresh session from `boot.pluto.tv` at play time. This sidesteps the stale-session-token issue that previously caused some channels in WOD's `live.xml` to play "service no longer available" videos instead of the actual channel — those videos came from regional Pluto retirement notices triggered by tokens that had been minted in regions Pluto has since pulled out of. By minting our own session from the user's actual region, we get the live channel every time the channel is available in that region.
+
+If a Pluto channel still fails to play in 3.1.0+, it's almost always because the channel itself isn't available in your region — Pluto geo-locks some content. Same channel ID may work for one user and not another.
+
+### Link resolution (all replay and live sources)
+
+At play time, `resolve_best_link()` in `wrestling.py` tries each link in order:
+1. **Debrid** — `resolveurl.HostedMediaFile(link).resolve()`. First successful result wins.
+2. **Direct video** — any link with a recognisable video extension (`.mp4`, `.mkv`, `.m3u8`, etc.)
+3. **HTTP fallback** — first HTTP URL, played directly by Kodi
+
+The user sees none of this — it either plays or shows an error notification. The same code path serves all four MicroJen-format sources (WR, WOD, FOD, Live) because they share the feed format.
+
+---
+
+## File Structure
+
+```
+plugin.video.echoondemand/
+  addon.xml                  Kodi metadata, dependencies (includes resolveurl)
+  default.py                 Entire plugin — routing, views, IPTV data layer,
+                             STATIC_MENUS for WOD/FOD/Live curated trees,
+                             settings backup/restore
+  icon.png                   Addon icon (256x256)
+  fanart.jpg                 Addon background fanart
+  resources/
+    settings.xml             Four user-facing settings
+    __init__.py
+    lib/
+      __init__.py
+      wrestling.py           MicroJen feed data layer — fetch, parse, resolve.
+                             Source-agnostic: handles WR, WOD, FOD, Live with
+                             the same code paths.
+    images/
+      genres/                PNG icons (256x256 RGBA, template-style)
+        Action.png, Comedy.png, Wrestling.png  (refreshed in 3.0.0)
+        WWE RAW.png, WWE SmackDown.png, NXT.png, AEW.png, AEW Collision.png
+        TNA.png, NWA.png, NJPW.png, ROH.png, RPW.png, Indy Wrestling.png  (new in 3.0.0)
+        UFC Replays.png, Boxing Replays.png, MMA.png  (MMA new in 3.0.0)
+        Live.png, Live Wrestling.png  (new in 3.0.0)
+        WrestleMania.png, PPV Events.png, Latest Shows.png, Free.png
+        Wrestling on Demand.png, Fights on Demand.png  (new in 3.0.0)
+        Netflix.png, Hulu.png, ABC.png, Popular TV Shows.png, etc.  (58 new
+        Movies/Series category icons in 4.0.1, same template)
+        ... (141 files total)
+```
 
 ---
 
 ## Architecture
 
-```
-plugin.video.echoondemand/
-├── default.py              # Main plugin — routing, views, API, cache, TMDB
-├── addon.xml               # Addon manifest with <assets> block
-├── fanart.jpg              # Default background (film reel / fantasy landscape)
-├── icon.png                # Addon icon (256×256)
-├── README.md               # This file
-└── resources/
-    ├── settings.xml        # Settings: username, password, buffer_secs, tmdb_api_key
-    └── images/
-        └── genres/         # 99 bundled genre icons (PNG, 256×256)
+### default.py
 
-tools/
-└── gen_genre_icons.py      # Generates the bundled genre icon PNGs (see below)
-```
+A single-file plugin following Kodi's standard pattern:
 
-### Routing
+- `router(paramstring)` — reads URL params, dispatches to the right view function
+- One `list_*` function per directory view, one `play_*` function per playable type
+- `STATIC_MENUS` dict at module top defines the WOD, FOD, and Live curated trees as pure data
+- `list_static_menu(menu_key, title)` renders one level of a static tree; entries either drill into another static menu or hand off to `list_wr` against a feed XML
+- `do_settings_backup()` / `do_settings_restore()` write/read a JSON snapshot to `special://userdata/`
+- Cache uses `{ts, payload}` JSON files in the addon profile directory
+- TMDB fanart is a separate persistent JSON cache, populated lazily at play time, preserved across "Refresh / Clear Cache"
 
-| mode | Parameters | Action |
+**Content type decisions (important for skin behaviour):**
+
+| View | `setContent()` | Reason |
 |---|---|---|
-| *(none)* | — | Root view (Movies / Series / Refresh) |
-| `movie_cats` | — | Movie genre category list |
-| `movies` | `cat_id` | Movie list for a genre |
-| `play_movie` | `vod_id`, `ext`, `vod_name`, `vod_year` | Resolve and play a movie |
-| `series_cats` | — | Series genre category list |
-| `series` | `cat_id` | Series list for a genre |
-| `seasons` | `series_id` | Season list for a series |
-| `episodes` | `series_id`, `season` | Episode list for a season |
-| `play_episode` | `ep_id`, `ext` | Resolve and play an episode |
-| `refresh` | — | Clear all cache, return to root |
+| Root | `addons` | Prevents skin's episode info panel from rendering |
+| Movie categories | `files` | Suppresses skin's right-panel info slot for genre lists |
+| Movies | `movies` | Full movie metadata panel |
+| Series categories | `files` | Same as movie categories |
+| Series | `tvshows` | Full TV show metadata |
+| Seasons | `seasons` | Kodi season view |
+| Episodes | `episodes` | Episode list with info panel |
+| WR / WOD / FOD / Live (any level) | `files` | Right panel suppressed; Plot still set on items so the Info button works |
 
-### Cache files (addon profile directory)
+### resources/lib/wrestling.py
 
-| File | TTL | Contents |
+Pure data layer — no Kodi UI calls. Importable and testable in isolation. Originally built for Wrestling Rewind; now drives WOD, FOD, and Live too because all four sources use the same MicroJen format.
+
+Three logical sections:
+1. **Cache** — `cache_load()` / `cache_save()` — raw feed text keyed by sanitised URL
+2. **Parse** — `parse_feed()` dispatches to `parse_xml()` or `parse_json()`. XML parser has four recovery passes including a per-item regex fallback for broken feeds. Aliases the WOD-specific `<summaru>` typo to `summary`.
+3. **Resolve** — `resolve_best_link()` — debrid first, direct video second, HTTP fallback third
+
+Plus `strip_format_tags()` — text utility for cleaning Kodi BBCode-style noise (`[COLOR ...]`, `[B]`, `[I]`, malformed variants) out of titles for display.
+
+### Cache system
+
+All cache files live in `xbmcvfs.translatePath(ADDON.getAddonInfo('profile'))`.
+
+| File pattern | TTL | Contents |
 |---|---|---|
-| `movie_cats.json` | 1 hour | Movie genre category list |
-| `series_cats.json` | 1 hour | Series genre category list |
-| `movies_{cat_id}.json` | 30 min | Movie list for one genre |
-| `series_{cat_id}.json` | 30 min | Series list for one genre |
+| `movie_cats.json` | 1 hour | Movie genre list from API |
+| `series_cats.json` | 1 hour | Series genre list from API |
+| `movies_{cat_id}.json` | 30 min | Stream list for one movie category |
+| `series_{cat_id}.json` | 30 min | Stream list for one series category |
 | `seriesinfo_{id}.json` | 1 hour | Full season/episode data for one series |
-| `tmdb_fanart.json` | permanent | TMDB backdrop URLs keyed by `name\|year` |
+| `tmdb_fanart.json` | Permanent | TMDB backdrop URL cache (preserved across "Refresh / Clear Cache") |
+| `wr_{url_hash}.json` | 30 min | MicroJen feed cache — covers WR, WOD, FOD, Live |
 
-### Stream URL formats
+"Refresh / Clear Cache" deletes all `*.json` files from the profile directory **except `tmdb_fanart.json`**, which is preserved because it represents many plays of accumulated work.
+
+### Settings persistence
+
+Kodi's per-addon userdata layout (which Echo OnDemand uses unmodified):
+
 ```
-Movie:   https://{server}/movie/{user}/{pass}/{vod_id}.{ext}
-Episode: https://{server}/series/{user}/{pass}/{episode_id}.{ext}
+<KODI_HOME>/userdata/
+  addon_data/
+    plugin.video.echoondemand/
+      settings.xml          ← username, password, etc. (Kodi-managed)
+      *.json                ← cache files (addon-managed)
+  echoondemand_settings.json  ← Backup/Restore snapshot (addon-managed, new in 3.0.0)
 ```
 
-### Pre-buffer implementation
-After `setResolvedUrl`, the plugin process stays alive until Python exits. The buffer function polls `player.isPlaying()` every 250ms (up to 12s), pauses when playback starts, waits the configured seconds, then resumes using `xbmc.getCondVisibility('Player.Paused')` — `xbmc.Player.isPaused()` does not exist in Kodi Omega.
-
-### TMDB fanart implementation
-TMDB fanart is fetched during the pre-buffer window (absorbed into existing wait time) using `/search/movie?query={name}&year={year}`. Results are cached in `tmdb_fanart.json` keyed by `name|year`. The cache is read at list load time (local JSON read only, no API calls). Movies without a cached backdrop use the addon's default fanart.
+`addon_data/plugin.video.echoondemand/` is wiped on uninstall. `echoondemand_settings.json` (one level up) survives uninstall and is the safety net the Backup/Restore feature relies on.
 
 ---
 
-## Known Limitations
+## Adding a New Content Section
 
-- **Movie backdrop art**: This provider's `get_vod_streams` response does not include any backdrop/fanart field. Movie backgrounds use TMDB cache if configured, otherwise addon default fanart.
-- **Series without backdrop**: Falls back to addon default fanart.
-- **TMDB cache fills gradually**: Only populated when movies are played. No batch pre-fetch to avoid blocking list loads.
-- **Genre icons**: Bundled for 99 common genres/categories. Unknown genres fall back to `DefaultGenre.png`. New genre icons can be generated with `tools/gen_genre_icons.py` (add an entry to its `CATEGORY_COLORS` dict, then rerun) or added by hand to `resources/images/genres/` as `{genre_name}.png`.
-- **Media flags** (resolution, codec, audio): Only appear for items that have been played at least once — Kodi stores these from actual stream playback.
+There are three patterns depending on what the upstream source looks like.
+
+### Pattern A: source has a master menu XML (like Wrestling Rewind)
+
+1. **Add a root entry** in `list_root()` that points `mode=wr_list` at the master XML URL.
+2. Done. Existing `list_wr` walks the tree from there.
+
+### Pattern B: source needs a curated tree (like WOD, FOD, Live)
+
+1. **Add entries to `STATIC_MENUS`** at the top of `default.py`. Use existing entries as templates.
+2. **Add a root entry** in `list_root()` that points `mode=static_menu&key=<your_key>` at the new menu.
+3. Done. `list_static_menu` and `list_wr` cover the rest.
+
+### Pattern C: completely different feed format
+
+If the source uses neither MicroJen XML nor JSON:
+
+1. Create `resources/lib/{source}.py` mirroring the structure of `wrestling.py` (fetch, parse, resolve). No Kodi UI calls.
+2. Add `list_{source}` and `play_{source}` functions in `default.py` following `list_wr` / `play_wr` exactly.
+3. Wire up the router with new modes.
+4. Add a root entry in `list_root()`.
+
+No changes to `addon.xml` unless the new source requires an additional Kodi module dependency.
 
 ---
 
-## Changelog
+## Skin Notes (Aeon Nox Silvo)
 
-### 1.3.3
-- New addon icon: a proper rounded-square mark (transparent corners, not a
-  flat black square background). Bumped mainly so the icon change is
-  visible to users on their next update check.
+The addon was developed and tested against Aeon Nox Silvo. Two skin files were modified alongside the addon to suppress unwanted info panels:
 
-### 1.3.2
-- Added 60 new genre icons covering streaming services (Netflix, Hulu,
-  Disney+, HBO Max, Paramount+, Peacock, etc.), broadcast networks (ABC,
-  CBS, FOX, NBC, BBC, etc.), general charts (Popular/Trending/Top Rated),
-  and international categories — 99 bundled icons total, up from 39.
-- Fixed a transparency bug in the icon generator: the ring, inner circle,
-  bottom bar, and text were saved with partial alpha copied from the
-  original hand-made icons, but `ImageDraw` fills overwrite pixels rather
-  than blending onto them, so those regions ended up genuinely
-  semi-transparent and showed a washed-out white cast depending on what
-  they were composited against. All solid fills are now fully opaque
-  (alpha=255); only the background glow is intentionally translucent, and
-  it's built as its own layer blended with `Image.alpha_composite`, which
-  does blend correctly.
-- Fixed a Windows/NTFS bug affecting the 6 categories with a colon in
-  their name (e.g. "KR: Korean TV Shows"): a colon in a filename isn't
-  rejected by Windows, it's parsed as an Alternate Data Stream separator,
-  so `Image.save()` "succeeded" while silently writing into a hidden
-  stream on a zero-byte file instead of a real PNG. `get_genre_icon()`
-  now sanitizes the genre name the same way the generator sanitizes
-  filenames before probing for a bundled icon, so real files saved under
-  the sanitized name are actually found at runtime.
-- Genre icon generator moved from a scratch script into `tools/gen_genre_icons.py`
-  as a proper project tool (see Architecture below).
+- `MyVideoNav.xml` — ghost control reference removed; info panel conditions added
+- `View_50_List.xml` — right-side info panel suppressed when `Container.Content(files)` and `Container.PluginName` match
 
-### 1.3.1
-- `list_seasons` now falls back to building season folders straight from
-  the 'seasons' API list when 'episodes' is empty (season metadata synced
-  but no episodes yet) — previously this showed zero seasons despite the
-  docstring already claiming this fallback existed; it didn't.
-- `api_get()` now retries transient failures (timeout, connection drop,
-  5xx, an unparseable response) up to 3 times with exponential backoff
-  before giving up, instead of failing on the first blip. A 4xx response
-  (bad credentials, bad request) still fails immediately.
-- `list_series` now shows "No series found in this category" and marks
-  the directory unsuccessful when a category has zero series, matching
-  the behavior `list_movies` already had — previously it just showed a
-  silently empty (but "successful") folder.
-- Removed the stale, narrower changelog snippet duplicated in `default.py`'s
-  module docstring (said v1.1.0, listed only the 1.0.1 Omega fixes) — this
-  file is the one source of truth for version history now.
+If the skin is updated or replaced, the `setContent()` values above may need revisiting. The most visible symptom of a mismatch is an empty info panel on the right side of a category list.
 
-### 1.3.0
-- Final fanart confirmed (film reel / fantasy landscape)
-- README fully updated
-- Version milestone: feature-complete for initial release
+---
 
-### 1.2.x
-- TMDB fanart cache bug fixed — fanart was computed but not passed to make_art()
-- Movie and series runtime added via `episode_run_time` → `tag.setDuration()`
-- TMDB cache loading no longer gated on key presence (always reads local cache)
-- Companion skin edit: plot synopsis overlay in MyVideoNav.xml
-- Companion skin edit: ScriptHelperFlags grouplist widened 340→480px for full rating display
+## Troubleshooting
 
-### 1.2.0
-- New default fanart (film reel / fantasy landscape, less busy than original)
-- Movie fanart reverted to clean ADDON_FANART fallback (poster-as-background caused severe cropping)
-- README added
+**"No items found in this section" on a Wrestling / WOD / FOD / Live sub-feed**
+Clear the cache (root menu → Refresh / Clear Cache) and retry. If it persists, check the Kodi log for `[EchoOD/Wrestling] PARSE FAILED` — the log line includes the first 300 characters of the raw feed for diagnosis.
 
-### 1.1.x
-- TMDB fanart integration (optional, lazy cache populated at play time)
-- Movie metadata enriched: cast, director, genre now set via InfoTagVideo
-- Series director added to InfoTagVideo
-- Series fanart carried through season and episode views
-- landscape art type tested and confirmed unsupported by skin (reverted)
-- Diagnostic logging added and removed after confirming provider field set
+**Item plays blank / "Could not resolve stream"**
+Check the Kodi log for `[EchoOD/Wrestling] resolve_best_link` lines. These are logged at INFO level (no debug mode needed). They show each candidate URL, whether resolveurl accepted it, and which pass was used. Most likely cause: debrid account not configured in resolveurl settings, or the hoster is not supported. For FOD, the Free / No Debrid sub-menu is available as a workaround.
 
-### 1.1.0
-- Full audit: make_art fanart fallback restored (fixed movies losing background after 1.0.9 regression)
-- ADDON_PATH module constant added (eliminates repeated translatePath calls in genre icon lookup)
-- Docstring version corrected
+**Titles show literal `[COLOR ...]` or `[B]` text**
+This means a malformed BBCode tag passed through `strip_format_tags()`. Open an issue with the exact title string so the regex can be widened.
 
-### 1.0.x
-- 40 bundled genre icons (colour-coded, Poppins Bold labels, adaptive bar height)
-- isPaused() → xbmc.getCondVisibility('Player.Paused') (Omega compatibility)
-- Pre-buffer default raised to 5s, notification toast removed (silent buffer)
-- Icon and fanart path resolution fixed (assets block in addon.xml, path from addon root)
-- Root emoji labels replaced with plain text (skin font compatibility)
-- Series fanart propagation to seasons/episodes
-- Context menus: Mark as Watched, Information, Queue
-- offscreen=True on all ListItem construction
-- SpecialSort=bottom on Refresh entry
-- setInfo → getVideoInfoTag / InfoTagVideo API throughout (Omega)
-- Cast: list[str] → list[xbmc.Actor] (Omega)
-- xbmc.gui version corrected for Omega (5.17.0)
+**Movies/Series show "Please enter credentials" on every open**
+Enter username and password in Settings (addon settings, not Kodi system settings). The server address is hardcoded — only credentials are user-configurable.
 
-### 1.0.0
-- Initial release: Movies by genre, Series with season/episode navigation, local caching, pre-buffer, bundled fanart/icon
+**Kodi hangs loading a category (spinning indefinitely)**
+Fixed in v2.5.0. All error paths now call `endOfDirectory(succeeded=False)`. If this occurs on v2.5.0+, it is a new error path that was missed — check the Kodi log for `[EchoOD]` entries around the time of the hang.
+
+**Cache cleared but TMDB backdrops are still cached**
+Intentional in v2.6.0+. The TMDB cache (`tmdb_fanart.json`) is preserved across "Refresh / Clear Cache" because it accumulates over many plays. To wipe it, delete the file manually from the addon profile directory.
+
+**A live channel fails to play with "Error creating demuxer" in the Kodi log**
+Some live channels are HLS streams served by Pluto TV's stitcher (or other HLS sources) — Kodi's built-in demuxer can fail on these. v3.0.1+ hands HLS URLs to `inputstream.adaptive` automatically, which handles them more reliably. If it still fails: confirm `inputstream.adaptive` is installed and enabled (Add-ons → My add-ons → VideoPlayer InputStream → InputStream Adaptive).
+
+**A Pluto TV channel plays a "service no longer available" video instead of the live channel**
+This was the dominant failure mode in v3.0.x — stale session tokens baked into WOD's upstream `live.xml` feed pointed at regional Pluto retirement notices. v3.1.0 fixes this by minting fresh session tokens at play time via Pluto's boot endpoint. If you still see a retirement notice on v3.1.0+, the channel itself has been pulled in your region — Pluto geo-locks some content per-channel.
+
+**A Pluto TV live channel fails with "HTTP error 403" from inputstream.adaptive**
+v3.0.2+ injects a Chrome-shaped User-Agent and a `pluto.tv` Referer for any URL containing `pluto.tv` to clear this. If a Pluto channel still 403s on v3.1.0+, run "Refresh / Clear Cache" — the in-memory Pluto session may have aged out unusually. If that doesn't help, check the Kodi log for `pluto:` lines around the time of the failure.
+
+**The Pluto resolver itself is misbehaving**
+You can disable it in Settings → "Use Pluto TV resolver". When off, the addon falls back to playing whatever stitcher URL was in the upstream feed (the v3.0.2 behaviour). Use this as a temporary workaround only — you'll lose access to the curated Sports Streams channels entirely, and live wrestling becomes hit-or-miss again. Re-enable as soon as the underlying issue is resolved.
+
+**Lost settings after reinstalling the addon**
+Use the Backup Settings entry before uninstalling, and Restore Settings after reinstalling. See "Upgrading from a previous version" above for prevention. Backup file lives at `<KODI_HOME>/userdata/echoondemand_settings.json`.
+
+**"Backup is from a newer addon version" on restore**
+You're trying to restore a backup made by a later Echo OnDemand into an earlier one. This is refused on purpose — the backup schema may have changed. Either upgrade the addon to a version >= the one in the backup file's `version` field, or ignore the backup and re-enter settings manually.
