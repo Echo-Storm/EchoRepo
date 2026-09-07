@@ -1,430 +1,38 @@
 #!/usr/bin/env python3
 """
-plugin.video.echoondemand — Echo OnDemand  v4.0.0
+plugin.video.echoondemand — Echo OnDemand  v1.3.3
 Kodi Omega (v21) plugin for browsing and playing VOD content (Movies and Series)
-from an Xtream Codes IPTV service, plus a unified Stream menu containing all
-live + on-demand replay sources (Live Wrestling, Wrestling Rewind, Wrestling on
-Demand, Fights on Demand, and the full USA Pluto TV channel lineup organized
-by Pluto's own category groupings).
+from an Xtream Codes IPTV service.
 
-Changes in 4.0.0 (top-menu restructure + addon-wide icon pass):
-  - RESTRUCTURE: Top menu reduced from 9 entries to 4. Layout is now:
-      Movies
-      Series
-      Stream    (new home for all live + replay sources)
-      Tools     (new home for backup / restore / refresh)
-    The v3.x arrangement had Wrestling Rewind, WOD, FOD, and Live as
-    separate root entries, plus three Tools-y entries pinned to the
-    bottom. Cleaner now.
-  - NEW: list_stream() — Stream menu has Live Wrestling at top, then
-    Wrestling Rewind, Wrestling on Demand, Fights on Demand, then all
-    Pluto USA categories alphabetically. Replaces the v3.3.0 list_live().
-  - NEW: list_tools() — single home for Backup / Restore / Refresh.
-  - REMOVED: mode=list_live route (replaced by mode=list_stream). Any
-    Kodi favorites pointing at the old route will need to be re-added.
-  - ICONS: 26 new bundled icons in resources/images/genres/ to provide
-    visual consistency across menus that previously fell back to the
-    plain addon icon. Pluto USA categories: Animals & Nature, Anime,
-    Classic TV, Competition Reality, Daytime & Game Shows, En Espanol,
-    Entertainment, History & Science, Home & Food, Local News, Movies,
-    Music Videos, News & Opinion, Sports, True Crime, Westerns. WoD /
-    FoD / Tools sub-menus: WWE, Other Promotions, Interviews, Special
-    Matches, Random Events, Movies & TV, Archive, UFC, Tools, Stream.
-    Plus Series (top menu).
-  - ICON LOOKUP: _menu_icon() now tolerant of name variations — case-
-    insensitive matching, '&' / '+' / ' and ' interchangeable, accent
-    stripping (Espa\u00f1ol -> Espanol), and a plural fall-through
-    (Westerns -> Western). So whichever exact form Pluto's catalog
-    happens to use for a category will resolve to the right icon as
-    long as the canonical name is anywhere close.
-  - STATIC_MENUS: Filled in icon_label fields on every WoD / FoD entry
-    that previously had none (Other Promotions, Interviews & Kayfabe,
-    Special Matches, Random Events, Movies & TV, Archive, WWE root,
-    UFC sub-entries, etc).
-  - WR FIX: Wrestling Rewind's upstream feed includes a "Settings"
-    entry that's an internal/admin link, not watchable content — now
-    filtered at render time. Restricted to WR feeds only (URL contains
-    'wrestlingrewind') so a WoD/FoD entry legitimately named "Settings"
-    wouldn't be hidden.
-  - WR FIX: Wrestling Rewind backgrounds were flickering between
-    sub-categories because per-item fanart in the upstream feed varies
-    wildly. Now WR consistently uses ADDON_FANART for the background.
-    WoD/FoD keep using item-level fanart as before — they don't have
-    the flicker problem.
-
-Changes in 3.3.0 (Pluto USA full lineup via mjh's catalog):
-  - REPLACED: Sports Streams (the curated 7-channel list) is gone. The Live
-    menu is now structured as:
-      Live
-      ├── Live Wrestling     (WOD's live.xml — unchanged)
-      ├── Sports             (all Pluto USA "Sports" channels)
-      ├── News               (all Pluto USA "News" channels)
-      ├── Entertainment      (...)
-      └── ...                (every Pluto USA group, alphabetical)
-    Each category folder lists its channels alphabetically by name with
-    EPG plot showing the next 5 upcoming programs in local time.
-  - NEW: resources/lib/pluto_catalog.py — fetches mjh's gzipped catalog
-    (https://i.mjh.nz/PlutoTV/.channels.json.gz), caches in memory for
-    6 hours.  Public API: get_catalog(), clear_cache(), usa_groups(),
-    channels_in_group().  Used by the new list_live() and
-    list_pluto_channels() views.
-  - NEW: list_live() — replaces the old static_menu route for Live.
-    Renders Live Wrestling at top + Pluto USA categories below, dynamically.
-  - NEW: list_pluto_channels(group) — renders channels in a Pluto category,
-    alphabetical by name, with EPG plot.
-  - REMOVED: STATIC_MENUS['live_sports'] (the curated 7 channels).
-  - REMOVED: 6 generated sports icons (Golf.png, F1.png, UFC.png,
-    Bellator.png, ONE.png, Boxing.png) since they're no longer referenced.
-  - WIRING: cache_clear_all now also wipes the catalog cache, so Refresh /
-    Clear Cache forces a fresh catalog fetch on the next Live menu open.
-  - DEPENDENCY: i.mjh.nz, in addition to jmp2.uk added in v3.2.0. Both are
-    Matt Huisman's services. If mjh's catalog host is unavailable, list_live
-    still shows Live Wrestling and surfaces a friendly notification; jmp2.uk
-    handles channel resolution independently of catalog availability.
-
-Changes in 3.2.0 (Pluto resolver — switch to AppleTV-app pathway):
-  - REWRITE: pluto.py abandons the direct-to-Pluto boot endpoint approach
-    (which produced web-stitcher URLs that returned HTTP 403 due to CORS
-    gating, no matter how thoroughly we mimicked browser headers).  Now
-    uses the strategy from slyguy.pluto.tv.provider, which is well-
-    maintained and known-working in production:
-      1. HEAD jmp2.uk/plu-<channel_id>.m3u8 (Matt Huisman's redirect service).
-      2. Read the 302 Location header — it's a current Pluto stitcher URL
-         with session params already baked in, plus a {PSID} placeholder.
-      3. Substitute {PSID} with a deterministic UUID3(MAC) so the same
-         machine always presents the same identity to Pluto.
-      4. The resolved URL targets Pluto's AppleTV-app stitcher endpoint
-         (NOT the web one).  AppleTV apps don't operate in a browser
-         context, so this endpoint doesn't enforce CORS.  Setting our
-         User-Agent to match the AppleTV app's is what makes the requests
-         pass through.
-  - HEADERS: ISA's manifest_headers / stream_headers now sets only
-    User-Agent (matching the AppleTV app).  v3.1.3's Origin/Referer/Accept
-    additions were appropriate for the web stitcher but redundant — and
-    potentially anomalous — for the AppleTV stitcher.  Down to one header.
-  - DEPENDENCY: jmp2.uk (mjh.nz).  This is a third-party redirect service
-    we now depend on for URL resolution.  It's stable and used widely in
-    Kodi addon development.  If it ever goes down, the kill-switch setting
-    disables the resolver gracefully.
-  - REMOVED: The boot endpoint code path (boot.pluto.tv/v4/start), the
-    multi-shape response parsing (channels[]/EPG[]/channel singular), the
-    URL construction fallback (servers.stitcher + stitcherParams), and
-    the verbose diagnostic logging machinery.  All of it was needed to
-    reverse-engineer Pluto's web API; none of it is needed for the
-    redirect-service approach.  Net code reduction is ~200 lines.
-
-Changes in 3.1.3 (Pluto stream-fetch headers — clear stitcher CORS check):
-  - FIX: Added Origin, Accept, and Accept-Language to the inputstream.adaptive
-    manifest_headers / stream_headers properties for Pluto URLs.  Per v3.1.2
-    production logs, the URL construction worked (verified by Pluto returning
-    a fresh US-region session via `country=US`, `marketingRegion=US`, correct
-    deviceLat/Lon for Indiana) but ISA still got HTTP 403 fetching the
-    manifest itself.  The new stitcher endpoint (/v2/stitch/embed/hls/...
-    that v3.1.2 builds against) is stricter than the old /stitch/hls/...
-    path and enforces CORS-style origin checks; `Origin: https://pluto.tv`
-    closes that gap.  The Accept and Accept-Language headers are cheap
-    additional browser signals that don't hurt and may help with edge-case
-    filtering.
-  - HEADERS NOW SENT TO PLUTO STREAM FETCHES: User-Agent (Edge 147 from
-    pluto.py), Referer (https://pluto.tv/), Origin (https://pluto.tv),
-    Accept (*/*), Accept-Language (en-US,en;q=0.9).  Non-Pluto HLS streams
-    (WWE Network CloudFront, etc.) still skip header injection entirely —
-    only URLs containing pluto.tv get the Pluto-specific treatment.
-
-Changes in 3.1.2 (Pluto resolver — construction path + diagnostic expansion):
-  - FIX: pluto.py now constructs the playable stitcher URL from the boot
-    response's `servers.stitcher` and `stitcherParams` components, the
-    same way Pluto's web player does.  Per the v3.1.1 production log,
-    Pluto's per-channel boot response contains an `EPG[1]` entry for the
-    requested channel but no pre-built URL inside it.  The session info
-    (sid, deviceId, JWT) is in `stitcherParams`; the base path is in
-    `servers.stitcher`; we now assemble:
-      {servers.stitcher}/v2/stitch/embed/hls/channel/{channel_id}/master.m3u8?{stitcherParams}
-    Construction runs after extraction fails, so a future Pluto change
-    that adds back pre-built URLs would still work via the original
-    extract path.
-  - LENIENT: EPG[]/channels[] match logic now accepts `_id`, `id`, or
-    `slug` as the ID field (previously only `_id`).  When a list has
-    exactly one entry — typical for per-channel boots — it's accepted
-    without ID matching, since channelSlug=<id> in the request guarantees
-    the response is for that channel.
-  - DIAGNOSTIC: When both extract and construction fail, the failure log
-    now includes: `servers.stitcher` value, `stitcherParams` value (first
-    200 chars), each channel-list-like array's first-entry keys, the
-    first-entry's id/_id/slug/name fields, the .stitched block's keys,
-    and a 1500-char response snippet split across 3 lines (so Kodi log
-    line-truncation doesn't lose the back half).
-
-Changes in 3.1.1 (Pluto resolver fix — match browser exactly + diagnostics):
-  - REWRITE: pluto.py now matches the Pluto web app's actual API usage,
-    captured from a real Edge 147 browser request to boot.pluto.tv:
-      * Param name change: channelID → channelSlug (we pass the channel ID
-        as the value).  This is the critical fix — without channelSlug set,
-        Pluto's boot endpoint returns a default/restricted response that
-        doesn't include the user's regional channels.
-      * appVersion bumped to current ('9.21.0-...')
-      * deviceMake fixed: was 'firefox', now 'edge-chromium' (matches UA)
-      * deviceVersion bumped to '147.0.0'
-      * Added appLaunchCount and lastAppLaunchDate params
-      * Removed the unused 'constraints' param the browser doesn't send
-    Together these change the boot request from a guess-shape catalog fetch
-    into a per-channel session mint, which is what the web player actually
-    does and what Pluto's region-detection logic expects.
-  - REWRITE: Boot is now per-channel rather than once-per-session.  Each
-    channel ID gets its own cache entry (still 30-min TTL).  Network cost
-    is one extra fetch per cold channel, paid once per 30 minutes.
-  - HEADERS: Added Origin, Accept, Accept-Language, sec-ch-ua-*, sec-fetch-*,
-    DNT — matching the browser's full header set so Pluto's edge filtering
-    sees us as a real Edge tab rather than a bare Python urllib client.
-  - UA: Bumped to Edge 147 / Chrome 147 with the Edg/147.0.0.0 suffix.
-    This single constant (pluto.BROWSER_UA) is now used for both the boot
-    request and the inputstream.adaptive stream/manifest headers, so
-    everything Pluto sees from us has the same client identity.
-  - DIAGNOSTIC: pluto.py now logs (via a callback bridge into xbmc.log)
-    detailed info on resolver failure: top-level keys of the boot response,
-    length of channels[] / EPG[] / channel arrays, a 400-char snippet of
-    the response body, and the first channel entry's keys.  This lets us
-    debug shape changes from the Kodi log without modifying code.
-  - PARSE: Multi-shape response parsing — checks channels[] (current
-    expected shape), EPG[] (some boot variants), and channel singular
-    (likely shape for per-channel boot).  First match wins.
-
-Changes in 3.1.0 (Pluto TV resolver + Sports Streams):
-  - NEW: resources/lib/pluto.py — fetches a fresh session from boot.pluto.tv
-    at play time and resolves channel IDs to current HLS manifest URLs.
-    This fixes the WOD live.xml regional-retirement issue: stale session
-    tokens baked into the upstream feed pointed some Pluto channels at
-    "service no longer available" videos.  By minting our own session
-    (matching the user's actual region) we get the live channel instead.
-  - NEW: STATIC_MENUS['live_root'] now has two entries — 'Live Wrestling'
-    (existing, walks WOD's live.xml) and 'Sports Streams' (new, curated
-    list of seven Pluto TV themed sports channels: Golf Central, F1, UFC,
-    Bellator, ONE, Top Rank Classics, DAZN Ringside).  Both routes
-    resolve through pluto.py.
-  - NEW: list_static_menu now supports a third entry kind: 'channel_id'
-    entries become playable items routing to play_pluto.  This is what
-    Sports Streams uses.  Existing 'wr_url' (folder → list_wr) and
-    'menu_key' (folder → another static menu) entry kinds are unchanged.
-  - NEW: play_pluto view — resolves a channel ID to a fresh URL via
-    pluto.get_fresh_url, applies inputstream.adaptive properties (with the
-    Pluto headers from v3.0.2), and plays.  Used by Sports Streams.
-  - NEW: Setting `pluto_resolver_enabled` (bool, default true) — kill
-    switch for the Pluto resolver.  If Pluto changes their boot API and
-    the resolver breaks, the user can disable it without rolling back the
-    addon.  When disabled, play_wr falls back to the original stitcher
-    URL (current 3.0.2 behaviour) and play_pluto returns an error.
-  - PIPELINE: play_wr now silently routes Pluto URLs through the new
-    resolver before handing them to ISA.  Non-Pluto URLs (WWE Network
-    CloudFront, debrid resolutions, etc.) are unchanged.  Resolver
-    failure falls back to the original URL — worst case is identical to
-    v3.0.2 behaviour.
-  - CACHE: cache_clear_all now also wipes pluto.py's in-memory session
-    cache.  "Refresh / Clear Cache" forces a fresh boot fetch on the
-    next play.
-  - ICONS: 6 new template-style PNGs in resources/images/genres/ for
-    the Sports Streams entries (GOLF, F1, UFC, BELLATOR, ONE, BOXING).
-    UFC and Boxing intentionally use new minimal-label icons rather than
-    the existing 'UFC Replays' / 'Boxing Replays' icons — the new ones
-    label the channel, not the action.
-
-Changes in 3.0.2 (Pluto TV header fix + ISA cleanup):
-  - FIX: Pluto TV channels (TNA WRESTLING 24/7, LUCHA LIBRE AAA 24/7, and
-    similar in WOD's live.xml) were failing with HTTP 403 from the Pluto
-    stitcher CDN.  Pluto's edge servers reject requests that don't look
-    like they came from a web browser.  play_wr now sets inputstream.adaptive
-    manifest_headers and stream_headers with a Chrome-shaped User-Agent and
-    a pluto.tv Referer when the resolved URL is a Pluto stream.  Non-Pluto
-    HLS streams (WWE Network from CloudFront, etc.) are left alone — the
-    headers only apply when the URL contains pluto.tv.
-  - CLEANUP: Dropped the deprecated `inputstream.adaptive.manifest_type=hls`
-    property.  Kodi 21 (Omega) auto-detects manifest type from the response
-    Content-Type / URL extension; setting it explicitly produced a
-    deprecation warning in the Kodi log on every play.  Removing it
-    silences that warning without changing behaviour.
-
-Changes in 3.0.1 (live HLS fixes + audit):
-  - FIX: play_wr now sets inputstream.adaptive properties when the resolved
-    URL is HLS (.m3u8 manifests, Pluto TV stitcher URLs).  Kodi's built-in
-    demuxer can fail on session-bound HLS streams with 'Error creating
-    demuxer'; ISA's HLS handler is more forgiving.  No-op for direct
-    mp4/mkv files; harmless if inputstream.adaptive isn't installed.
-    The user-visible symptom this fixes: some live wrestling channels
-    (notably some Pluto-backed ones like AEW) failing to play while
-    others on the same feed worked fine.
-  - FIX: list_wr log message no longer prints 'skipping item item' when an
-    item-type entry has an empty link (cosmetic only — the skip itself
-    was correct).
-  - CONSISTENCY: wr_title default is now 'Wrestling Rewind' to match the
-    root rename; previously the function signature still said 'Wrestling'.
-    Only affects the fallback when no wr_title is passed (which the live
-    code paths always do).
-
-Changes in 3.0.0 (Live category, rename, settings backup, icon refresh):
-  - NEW: Live category with sub-menu (STATIC_MENUS['live_root']).  Currently
-    contains 'Live Wrestling' (WOD's live.xml feed).  FOD is a replay-only
-    service upstream; Wrestling Rewind is also replay-only.  The parent menu
-    is in place so future live sources are a STATIC_MENUS edit away.
-  - RENAME: Root entry 'Wrestling' → 'Wrestling Rewind' for honest labeling.
-    Each replay source now sits one click from the root menu, matching how
-    Movies and Series are organised.  No URL change — bookmarks still work.
-  - NEW: Backup / Restore Settings — two root menu entries that read/write a
-    snapshot of all four user settings (username, password, buffer_secs,
-    tmdb_api_key) to special://userdata/echoondemand_settings.json.  This
-    file lives one level up from the addon's own userdata directory and
-    survives a full uninstall.  Useful for users who install fresh zips
-    instead of using Kodi's update flow.
-  - ICONS: 17 new/refreshed icons in resources/images/genres/.  TNA, NWA,
-    NJPW, ROH, RPW, INDY, MMA, LIVE, LIVE WRESTLING, WRESTLEMANIA, PPV,
-    DOCS, LATEST, FREE, WOD, FOD all match the existing template style.
-    The blank-placeholder Wrestling.png is now a proper 'WRESTLING' icon.
-  - STATIC_MENUS: icon_label fields updated to point at the new icons where
-    appropriate.  No structural change — same dispatch model.
-  - DOCS: README and HANDOFF cover the upgrade flow explicitly.  Kodi
-    preserves userdata across 'Install from zip' over an existing addon,
-    but 'Uninstall' (then reinstall) wipes it.  The new Backup/Restore
-    feature is the safety net for the latter case.
-
-Changes in 2.6.0 (audit + WOD/FOD integration):
-  - NEW: Wrestling on Demand (WOD) section.  Curated category tree pointing at
-    individual MicroJen XML feeds on l3grthu.com/hades/wod21.  Covers WWE
-    (RAW, SmackDown, NXT, WrestleMania, PPV), other promotions (AEW, TNA,
-    NWA, NJPW, ROH, RPW, Indy), documentaries, interviews, and archive.
-    No live content (deliberately scoped to on-demand).
-  - NEW: Fights on Demand (FOD) section.  UFC PPV, Fight Night, ESPN/ABC/FOX/FUEL,
-    Classic, Shows; MMA; Boxing; plus a Free (No Debrid) sub-menu.  Sources
-    XML feeds from mylostsoulspace.co.uk/FightsOnDemand.
-  - NEW: STATIC_MENUS / list_static_menu() — single mechanism that drives both
-    new sections.  Each leaf is a dir item that hands off to the existing
-    list_wr() / play_wr() flow.  Adding a new section in the future is a
-    pure-data change to STATIC_MENUS, no new view code required.
-  - PARSER: wrestling.py now aliases <summaru> to 'summary' (WOD typo).
-  - PARSER: wrestling.py adds strip_format_tags() utility for cleaning Kodi
-    BBCode-style noise out of WOD/FOD titles for display.
-  - BUG FIX: list_wr now skips item-type entries with empty links (previously
-    only dir-type entries were skipped — items with empty links would appear
-    in the list but show "No playable link" on click).
-  - BUG FIX: list_wr handles the case where a dir-type entry has a list of
-    links (takes the first); previously this would urlencode the list into
-    a broken navigation URL.
-  - IMPROVEMENT: list_wr uses item-level thumbnail/fanart when present, falling
-    back to ADDON_ICON / ADDON_FANART.  Wrestling Rewind feeds rarely populate
-    these fields so the previous code was fine for that source; WOD/FOD feeds
-    are rich in artwork.
-  - IMPROVEMENT: list_wr sets Plot via InfoTagVideo for items with a summary,
-    so the user can press Info and see context.  setContent('files') is
-    unchanged so right-side info panel suppression still works in Aeon Nox Silvo.
-  - IMPROVEMENT: list_wr strips format tags from titles for clean display.
-  - BUG FIX: cache_clear_all() now preserves tmdb_fanart.json.  This cache is
-    independent of the IPTV / wrestling / fights caches and represents many
-    plays of accumulated work.  Was documented as a known limitation in v2.5.0.
-
-Changes in 2.5.0 (audit + bugfix sweep):
-  - BUG FIX: list_root() no longer gates on credentials_ok(). Wrestling is
-    accessible even when IPTV credentials are not configured. Each IPTV
-    section (list_movie_categories, list_series_categories) already does its
-    own credentials check — the root-level check was redundant and blocked
-    unrelated content.
-  - BUG FIX: All list_* exception return paths now call
-    endOfDirectory(HANDLE, succeeded=False) before returning. Previously,
-    every network/parse error left Kodi hanging in an infinite loading state
-    waiting for a directory response that never came. Affected:
-    list_movie_categories, list_movies, list_series_categories, list_series,
-    list_seasons, list_episodes.
-  - BUG FIX: credentials_ok() failure paths in list_movie_categories and
-    list_series_categories now call endOfDirectory(succeeded=False) for the
-    same reason.
-  - BUG FIX: list_wr() now skips dir items with empty link fields rather than
-    building a wr_url='' navigation URL that silently produces zero items.
-  - CLEANUP: import base64 moved to module-level. Redundant inline
-    `import base64` / `import json` removed from list_wr() and play_wr().
-
-Changes in 2.4.x (Wrestling UI consistency):
-  - Wrestling root entry uses ADDON_ICON like Movies and Series (no custom icon).
-  - list_wr: setContent('files') suppresses info panel; no VideoInfoTag calls.
-  - play_wr: no VideoInfoTag, no art on resolved ListItem.
-  - do_refresh: calls list_root(update_listing=True) so the Refresh URL is
-    replaced in-place in Kodi's navigation stack, preventing the cache-clear
-    notification from firing again on back-navigation.
-  - Wrestling.png genre icon added (unused by current code, available for future).
-
-Changes in 2.3.x (wrestling parser audit):
-  - _strip_preamble: regex now handles both <layouttype> and <layoutype> variants
-    (PPV feeds use single-t close tag).
-  - parse_xml: pass 4 added — per-item lenient regex extraction for feeds where
-    overall document structure is broken but individual items are valid XML.
-  - _strip_label_suffix: now handles any URI scheme (magnet:, http:, etc.) not
-    just http prefix. Previously magnet: labels were not stripped.
-  - normalise_links: now includes magnet: URIs for Real-Debrid torrent resolution.
-    Previously magnet links were silently dropped.
-  - _collect_items: wrapper detection is now generic. Previous code only
-    recognised <xml> as an intermediate wrapper, silently returning [] for PPV
-    feeds that use a different wrapper element name.
-  - parse_feed: mutual XML/JSON fallback when primary parser returns empty.
-  - All resolution and parse outcomes logged at LOGINFO (visible without debug mode).
-  - resolve_best_link: _url_from_resolved() handles both plain string and
-    ResolvedURL object; embeds headers in Kodi's native pipe format.
-
-Changes in 2.2.x (Wrestling Rewind integration, sublink nesting fix):
-  - Wrestling section added to root menu.
-  - resources/lib/wrestling.py: pure data layer — HTTP fetch, MicroJen XML/JSON
-    parse, cache, debrid resolution via resolveurl.
-  - Debrid is always attempted first; direct-link fallback is silent.
-  - _parse_element: two-pass sublink extraction handles both direct-child and
-    nested-inside-<link> sublink patterns (WR's own parser uses .//sublink).
-  - Pre-buffer applies to Wrestling playback using same setting as IPTV.
-  - script.module.resolveurl added as hard dependency in addon.xml.
-
-Changes in 2.0.0 (final IPTV polish pass):
-  - list_root setContent changed 'videos' → 'addons' (suppresses episode info panel).
-  - Companion skin edits (MyVideoNav.xml, View_50_List.xml): info panel suppressed
-    for category views; duplicate label removed; ghost control reference removed.
-
-Changes in 1.3.x (audit + cosmetic):
-  - credentials_ok() guard added to category views for deep-link safety.
-  - cat_name threaded through URL params for correct breadcrumb display.
-  - list_series, list_episodes: empty-list guards added.
-  - list_seasons: setContent 'tvshows' → 'seasons'.
-  - Refresh entry isFolder corrected False → True.
-  - play_movie: TMDB fetch moved to after _apply_buffer.
+Full version history: README.md ("Changelog" section) — kept there instead
+of here so there's one place to look, not two that can drift out of sync.
 
 Routing:
   (root)                                    -> list_root()
   mode=movie_cats                           -> list_movie_categories()
-  mode=movies       cat_id=X  cat_name=Y   -> list_movies(cat_id, cat_name)
+  mode=movies       cat_id=X               -> list_movies(cat_id)
   mode=series_cats                          -> list_series_categories()
-  mode=series       cat_id=X  cat_name=Y   -> list_series(cat_id, cat_name)
+  mode=series       cat_id=X               -> list_series(cat_id)
   mode=seasons      series_id=X            -> list_seasons(series_id)
   mode=episodes     series_id=X  season=N  -> list_episodes(series_id, season_num)
-  mode=play_movie   vod_id=X  ext=Y        -> play_movie(vod_id, ext)
-  mode=play_episode ep_id=X   ext=Y        -> play_episode(ep_id, ext)
-  mode=wr_list      wr_url=X [wr_title=Y]  -> list_wr(wr_url, wr_title)
-  mode=wr_play      wr_item=X              -> play_wr(wr_item)
-  mode=static_menu  key=K  title=T         -> list_static_menu(key, title)
-                                              (drives WOD, FOD, and Live trees)
-  mode=play_pluto   channel_id=C  title=T  -> play_pluto(channel_id, title)
-                                              (Sports Streams entries)
-  mode=settings_backup                      -> do_settings_backup()
-  mode=settings_restore                     -> do_settings_restore()
-  mode=refresh                             -> clear all cache, reload root
+  mode=play_movie   vod_id=X     ext=Y     -> play_movie(vod_id, ext)
+  mode=refresh                             -> clear all cache, go to root
 
-Cache strategy (all files in addon profile directory):
-  movie_cats.json          TTL 1 hour   -- movie genre category list
-  series_cats.json         TTL 1 hour   -- series genre category list
+Cache strategy (all files live in addon profile dir):
+  movie_cats.json          TTL 1 hour   -- list of movie genre categories
+  series_cats.json         TTL 1 hour   -- list of series genre categories
   movies_{cat_id}.json     TTL 30 min   -- movie list for one category
   series_{cat_id}.json     TTL 30 min   -- series list for one category
   seriesinfo_{id}.json     TTL 1 hour   -- full season/episode data for one series
-  tmdb_fanart.json         permanent    -- TMDB backdrop URL cache (key = name|year)
-  wr_{url_hash}.json       TTL 30 min   -- Wrestling feed cache (managed by wrestling.py)
 
 Stream URL formats (standard Xtream Codes):
-  Movie:   {SERVER}/movie/{user}/{pass}/{vod_id}.{ext}
-  Episode: {SERVER}/series/{user}/{pass}/{episode_id}.{ext}
+  Movie:   {server}/movie/{user}/{pass}/{vod_id}.{ext}
+  Episode: {server}/series/{user}/{pass}/{episode_id}.{ext}
 
 Assumptions:
   - Service is Xtream Codes-compatible (player_api.php supported).
   - Extension (.mkv, .mp4, etc.) comes from the API field 'container_extension'.
-  - All IPTV artwork URLs come from the API. Nothing is generated locally.
-  - script.module.resolveurl is installed and configured with a debrid account.
+  - All artwork URLs come from the API. Nothing is generated locally.
   - Kodi Omega (v21) / Python 3.
 """
 
@@ -433,19 +41,15 @@ import json
 import os
 import time
 import glob
-import base64
-from urllib.parse import parse_qsl, urlencode, quote
+from urllib.parse import parse_qsl, urlencode
 from urllib.request import urlopen, Request
+from urllib.error import URLError, HTTPError
 
 import xbmc
 import xbmcgui
 import xbmcplugin
 import xbmcaddon
 import xbmcvfs
-
-from resources.lib import wrestling     as _wr
-from resources.lib import pluto         as _pluto
-from resources.lib import pluto_catalog as _catalog
 
 # ---------------------------------------------------------------------------
 # Bootstrap
@@ -485,209 +89,6 @@ def _resolve_addon_art(filename):
 ADDON_PATH   = _resolve_addon_art('')          # addon root dir, trailing sep
 ADDON_FANART = _resolve_addon_art('fanart.jpg')
 ADDON_ICON   = _resolve_addon_art('icon.png')
-
-
-# ---------------------------------------------------------------------------
-# Wrestling on Demand (WOD) and Fights on Demand (FOD) — static category trees
-# ---------------------------------------------------------------------------
-# Both sources use the same MicroJen XML format that resources/lib/wrestling.py
-# already handles.  Neither has a single master menu XML on the upstream side
-# (WOD's l3grthu.com only serves leaf XMLs; FOD's fodmain-new.xml exists but
-# carries BBCode noise in its labels).  So we curate the menu structure here
-# in pure data and dispatch into the existing list_wr / play_wr flow.
-#
-# Each entry is one of:
-#   {'title': <label>, 'wr_url': <feed XML>, 'icon_label': <bundled icon match>}
-#       Renders as a folder.  Clicking enters list_wr against that XML.
-#       icon_label is matched against bundled PNG names in
-#       resources/images/genres/; missing match → ADDON_ICON.
-#   {'title': <label>, 'menu_key': <STATIC_MENUS key>}
-#       Renders as a folder.  Clicking enters another static menu.
-#
-# Editing this dict is the only change needed to add/remove a feed.
-# No view code or routing changes required.
-
-WOD_BASE = 'https://l3grthu.com/hades/wod21'
-FOD_BASE = 'https://mylostsoulspace.co.uk/FightsOnDemand'
-
-STATIC_MENUS = {
-    # ---------- Wrestling on Demand ----------
-    'wod_root': [
-        {'title': 'WWE',                  'menu_key':   'wod_wwe',
-                                          'icon_label': 'WWE'},
-        {'title': 'Other Promotions',     'menu_key':   'wod_other',
-                                          'icon_label': 'Other Promotions'},
-        {'title': 'Documentaries',        'wr_url':     WOD_BASE + '/documentaries/docmain.xml',
-                                          'icon_label': 'Documentary'},
-        {'title': 'Interviews & Kayfabe', 'wr_url':     WOD_BASE + '/kayfabe/main.xml',
-                                          'icon_label': 'Interviews'},
-        {'title': 'Special Matches',      'wr_url':     WOD_BASE + '/specialmatches/specialmatches.xml',
-                                          'icon_label': 'Special Matches'},
-        {'title': 'Random Events',        'wr_url':     WOD_BASE + '/latestshows/randomevents.xml',
-                                          'icon_label': 'Random Events'},
-        {'title': 'Movies & TV',          'wr_url':     WOD_BASE + '/mov.xml',
-                                          'icon_label': 'Movies & TV'},
-        {'title': 'Archive',              'wr_url':     WOD_BASE + '/Archives/archives.xml',
-                                          'icon_label': 'Archive'},
-    ],
-    'wod_wwe': [
-        {'title': 'RAW',                  'wr_url':     WOD_BASE + '/latestshows/raw.xml',
-                                          'icon_label': 'WWE RAW'},
-        {'title': 'SmackDown',            'wr_url':     WOD_BASE + '/latestshows/smackdown.xml',
-                                          'icon_label': 'WWE SmackDown'},
-        {'title': 'NXT',                  'wr_url':     WOD_BASE + '/latestshows/nxtmain.xml',
-                                          'icon_label': 'NXT'},
-        {'title': 'Latest Shows',         'wr_url':     WOD_BASE + '/latestshows/latestshows.xml',
-                                          'icon_label': 'Latest Shows'},
-        {'title': 'WrestleMania',         'wr_url':     WOD_BASE + '/wrestlemania/mainwm.xml',
-                                          'icon_label': 'WrestleMania'},
-        {'title': 'PPV Events',           'wr_url':     WOD_BASE + '/ppv/ppvmain.xml',
-                                          'icon_label': 'PPV Events'},
-        {'title': 'WWE YouTube',          'wr_url':     WOD_BASE + '/wweyt.xml',
-                                          'icon_label': 'WWE'},
-    ],
-    'wod_other': [
-        {'title': 'AEW',                  'wr_url':     WOD_BASE + '/aew/aewppv.xml',
-                                          'icon_label': 'AEW'},
-        {'title': 'TNA / Impact',         'wr_url':     WOD_BASE + '/tna/tnamain.xml',
-                                          'icon_label': 'TNA'},
-        {'title': 'NWA',                  'wr_url':     WOD_BASE + '/nwa/main.xml',
-                                          'icon_label': 'NWA'},
-        {'title': 'NJPW',                 'wr_url':     WOD_BASE + '/njpw/njpwmain.xml',
-                                          'icon_label': 'NJPW'},
-        {'title': 'ROH',                  'wr_url':     WOD_BASE + '/roh/main.xml',
-                                          'icon_label': 'ROH'},
-        {'title': 'RPW',                  'wr_url':     WOD_BASE + '/random/rpw.xml',
-                                          'icon_label': 'RPW'},
-        {'title': 'Indy Wrestling',       'wr_url':     WOD_BASE + '/indy.xml',
-                                          'icon_label': 'Indy Wrestling'},
-    ],
-
-    # ---------- Fights on Demand ----------
-    'fod_root': [
-        {'title': 'Latest UFC / MMA',     'wr_url':     FOD_BASE + '/latestufc-mmaevents.xml',
-                                          'icon_label': 'UFC Replays'},
-        {'title': 'UFC Events',           'menu_key':   'fod_ufc',
-                                          'icon_label': 'UFC'},
-        {'title': 'MMA Events',           'wr_url':     FOD_BASE + '/mmaevents/mmaeventreplaysmain-new.xml',
-                                          'icon_label': 'MMA'},
-        {'title': 'Boxing',               'wr_url':     FOD_BASE + '/boxing/boxingreplays-new.xml',
-                                          'icon_label': 'Boxing Replays'},
-        {'title': 'Free (No Debrid)',     'menu_key':   'fod_free',
-                                          'icon_label': 'Free'},
-    ],
-    'fod_ufc': [
-        {'title': 'UFC PPV',              'wr_url':     FOD_BASE + '/ufcevents/ufcppv-new.xml',
-                                          'icon_label': 'UFC Replays'},
-        {'title': 'UFC Fight Night',      'wr_url':     FOD_BASE + '/ufcevents/ufcfightnightreplays-new.xml',
-                                          'icon_label': 'UFC'},
-        {'title': 'UFC on ESPN',          'wr_url':     FOD_BASE + '/ufcevents/ufcfightnightonespn-new.xml',
-                                          'icon_label': 'UFC'},
-        {'title': 'UFC on ABC',           'wr_url':     FOD_BASE + '/ufcevents/ufconabc-new.xml',
-                                          'icon_label': 'UFC'},
-        {'title': 'UFC on FOX',           'wr_url':     FOD_BASE + '/ufcevents/ufconfoxtv-new.xml',
-                                          'icon_label': 'UFC'},
-        {'title': 'UFC on FUEL',          'wr_url':     FOD_BASE + '/ufcevents/ufconfueltv-new.xml',
-                                          'icon_label': 'UFC'},
-        {'title': 'UFC BJJ',              'wr_url':     FOD_BASE + '/ufcevents/ufcbjj-new.xml',
-                                          'icon_label': 'UFC'},
-        {'title': 'UFC Shows & Series',   'wr_url':     FOD_BASE + '/ufcshows/ufcshowsmain-new.xml',
-                                          'icon_label': 'UFC'},
-        {'title': 'Classic UFC PPV',      'wr_url':     FOD_BASE + '/ufcevents/classicufc-new.xml',
-                                          'icon_label': 'UFC Replays'},
-        {'title': 'Classic UFC Fight Night',
-                                          'wr_url':     FOD_BASE + '/ufcevents/classicfightnight-new.xml',
-                                          'icon_label': 'UFC'},
-        {'title': 'UFC Events Main',      'wr_url':     FOD_BASE + '/ufcevents/ufceventreplaysmain-new.xml',
-                                          'icon_label': 'UFC'},
-    ],
-    'fod_free': [
-        {'title': 'Free UFC',             'wr_url':     FOD_BASE + '/nondebridufc.xml',
-                                          'icon_label': 'Free'},
-        {'title': 'Free MMA',             'wr_url':     FOD_BASE + '/nondebridmmareplays.xml',
-                                          'icon_label': 'Free'},
-        {'title': 'Free Boxing',          'wr_url':     FOD_BASE + '/boxing/boxingreplays-nondebrid.xml',
-                                          'icon_label': 'Boxing Replays'},
-    ],
-
-    # ---------- Live ----------
-    # Live Wrestling stays here as a static entry (WOD's live.xml feed,
-    # channels resolved through pluto.py).  Pluto USA categories are no
-    # longer in STATIC_MENUS — they're rendered dynamically by list_live()
-    # from mjh's catalog.  See list_live() for the full Live menu shape.
-    #
-    # If WOD ever publishes a second live feed (live fights, etc.), it
-    # can be added here as another static entry without touching the
-    # dynamic Pluto rendering.
-    'live_root': [
-        {'title': 'Live Wrestling',       'wr_url':     WOD_BASE + '/live.xml',
-                                          'icon_label': 'Live Wrestling'},
-    ],
-}
-
-
-def _menu_icon(label):
-    """
-    Return the bundled icon path for a menu entry's icon_label, or ADDON_ICON
-    if no bundled match exists.  Stays inside resources/images/genres/ —
-    does not consult the optional moviegenreicons resource addon and does not
-    fall back to DefaultGenre.png.
-
-    Tolerant of name variations so Pluto's category-name conventions don't
-    require us to guess the exact form when icons are added:
-
-      - case-insensitive filename match
-      - '&' / '+' / ' and ' interchangeable in the label
-      - leading/trailing whitespace stripped
-      - accented characters stripped (Espa\u00f1ol -> Espanol)
-      - simple plural/singular fall-throughs (Westerns -> Western)
-
-    Lookup order tries each variant in turn; first match wins.
-    """
-    if not label:
-        return ADDON_ICON
-
-    # Normalize accents to ASCII so 'En Espa\u00f1ol' -> 'En Espanol' matches
-    # the on-disk filename which is ASCII-safe.  Lowercase early so the
-    # subsequent connector substitutions match regardless of input case
-    # ('NEWS AND OPINION' and 'News and Opinion' both reach the same target).
-    import unicodedata
-    base = unicodedata.normalize('NFKD', label).encode('ascii', 'ignore').decode('ascii')
-    base = base.strip().lower()
-    if not base:
-        return ADDON_ICON
-
-    # Build candidate label spellings (all lowercase).
-    candidates = []
-    seen = set()
-    def add(s):
-        s = s.strip()
-        if s and s not in seen:
-            seen.add(s)
-            candidates.append(s)
-
-    add(base)
-    add(base.replace('+', '&'))
-    add(base.replace('&', '+'))
-    add(base.replace(' and ', ' & '))
-    add(base.replace(' & ', ' and '))
-    # Plural fall-through: 'westerns' -> 'western'
-    if base.endswith('s') and len(base) > 2:
-        add(base[:-1])
-
-    # Case-insensitive lookup against the actual files in the genres dir.
-    icons_dir = os.path.join(ADDON_PATH, 'resources', 'images', 'genres')
-    try:
-        existing = {fn.lower(): fn for fn in os.listdir(icons_dir)}
-    except OSError:
-        return ADDON_ICON
-
-    for cand in candidates:
-        target = '{}.png'.format(cand)
-        if target in existing:
-            return os.path.join(icons_dir, existing[target])
-
-    return ADDON_ICON
 
 
 # ---------------------------------------------------------------------------
@@ -733,10 +134,26 @@ def credentials_ok():
 # Xtream Codes API
 # ---------------------------------------------------------------------------
 
+API_MAX_RETRIES = 3
+API_RETRY_BACKOFF_BASE = 1.0  # seconds; doubles each retry (1s, 2s, ...)
+
+
+class NetworkError(RuntimeError):
+    """A request ultimately failed after retries. Message is plain-language,
+    meant to be shown to the user via str(e) as-is -- every call site
+    already does `'...\\n{}'.format(e)`, so this needed no changes there."""
+    pass
+
+
 def api_get(action, extra_params=None):
     """
     Call player_api.php and return parsed JSON.
-    Raises URLError on network failure, ValueError if response is not JSON.
+
+    Retries transient failures (timeout, connection drop, 5xx, an
+    unparseable/non-JSON response) up to API_MAX_RETRIES times with
+    exponential backoff, then raises NetworkError with a plain-language
+    message. A 4xx response (bad credentials, bad request) fails
+    immediately -- retrying won't fix that.
     """
     username, password = get_credentials()
     params = {'username': username, 'password': password, 'action': action}
@@ -746,9 +163,34 @@ def api_get(action, extra_params=None):
     url = '{}?{}'.format(API_URL, urlencode(params))
     log('API: action={} extra={}'.format(action, extra_params))
     req = Request(url, headers={'User-Agent': 'Kodi/EchoOnDemand'})
-    with urlopen(req, timeout=30) as resp:
-        raw = resp.read().decode('utf-8', errors='ignore')
-    return json.loads(raw)
+
+    last_error = None
+    for attempt in range(API_MAX_RETRIES):
+        try:
+            with urlopen(req, timeout=30) as resp:
+                raw = resp.read().decode('utf-8', errors='ignore')
+            try:
+                return json.loads(raw)
+            except ValueError:
+                last_error = NetworkError(
+                    "The server didn't return valid data for '{}'. It may be down, or your "
+                    "username/password may be wrong.".format(action)
+                )
+        except HTTPError as e:
+            last_error = NetworkError('Server returned an error (HTTP {}) for \'{}\'.'.format(e.code, action))
+            if 400 <= e.code < 500:
+                raise last_error  # client error -- retrying won't help
+        except URLError as e:
+            last_error = NetworkError("Network error during '{}': {}".format(action, e.reason))
+        except Exception as e:
+            last_error = NetworkError("Unexpected error during '{}': {}".format(action, e))
+
+        if attempt < API_MAX_RETRIES - 1:
+            log('api_get retrying {} after failure (attempt {}/{}): {}'.format(
+                action, attempt + 1, API_MAX_RETRIES, last_error), xbmc.LOGWARNING)
+            xbmc.sleep(int(API_RETRY_BACKOFF_BASE * (2 ** attempt) * 1000))
+
+    raise last_error
 
 
 # ---------------------------------------------------------------------------
@@ -796,29 +238,13 @@ def cache_save(key, payload):
 
 
 def cache_clear_all():
-    """
-    Delete all *.json cache files in the profile dir.
-
-    EXCEPTION: tmdb_fanart.json is preserved.  It accumulates over many movie
-    plays (one TMDB lookup per unique movie name|year), and is independent of
-    the IPTV / wrestling / fights caches that users actually want to clear.
-    There's a separate path to wipe it deliberately if ever needed.
-    """
     pattern = os.path.join(_profile_dir(), '*.json')
     for path in glob.glob(pattern):
-        if os.path.basename(path) == 'tmdb_fanart.json':
-            continue
         try:
             os.remove(path)
             log('Deleted cache: {}'.format(os.path.basename(path)))
         except Exception as e:
             log('Could not delete {}: {}'.format(path, e), xbmc.LOGWARNING)
-    # Wipe the in-memory Pluto session cache + catalog cache too — next
-    # play_pluto / play_wr against a Pluto channel will fetch a fresh URL,
-    # and the next Live menu open re-fetches the catalog from mjh.
-    _pluto.clear_session_cache()
-    _catalog.clear_cache()
-    log('Pluto session + catalog caches cleared')
 
 
 # ---------------------------------------------------------------------------
@@ -858,8 +284,7 @@ def _save_tmdb_cache(cache):
 def fetch_and_cache_tmdb_fanart(name, year):
     """
     Search TMDB for a movie by name+year, cache and return its backdrop URL.
-    Called after _apply_buffer in play_movie — the plugin process stays alive
-    after setResolvedUrl so this runs while the stream is already playing.
+    Called during play_movie so the buffer period absorbs the network latency.
     Returns '' on any failure (missing key, network error, no results).
     """
     api_key = _tmdb_key()
@@ -1065,6 +490,21 @@ _GENRE_BUILTIN_MAP = {
 }
 
 
+#: Characters not valid in a Windows filename. A colon is the nastiest of
+#: these -- Windows/NTFS treats "name:rest" as an Alternate Data Stream
+#: reference rather than an error, so an icon name like "KR: Korean TV
+#: Shows" needs its colon stripped for the bundled-icon lookup to have any
+#: chance of finding the file tools/gen_genre_icons.py actually saved
+#: (that script hit this exact bug and sanitizes the same way -- keep
+#: both in sync if this ever changes).
+_INVALID_FILENAME_CHARS = ':\\/*?"<>|'
+
+
+def _sanitize_filename(name):
+    cleaned = ''.join(c for c in name if c not in _INVALID_FILENAME_CHARS)
+    return ' '.join(cleaned.split())
+
+
 def get_genre_icon(genre_name):
     """
     Return the best available icon path for genre_name.
@@ -1077,17 +517,18 @@ def get_genre_icon(genre_name):
 
     Uses the module-level ADDON_PATH constant — no repeated translatePath calls.
     """
-    normalised = genre_name.strip().title()
+    stripped    = genre_name.strip()
+    normalised  = stripped.title()
+    sanitized   = _sanitize_filename(stripped)
+    sanitized_tc = _sanitize_filename(normalised)
 
-    # 1. Bundled icon
-    bundled = os.path.join(ADDON_PATH, 'resources', 'images', 'genres',
-                           '{}.png'.format(genre_name.strip()))
-    if os.path.exists(bundled):
-        return bundled
-    bundled_tc = os.path.join(ADDON_PATH, 'resources', 'images', 'genres',
-                              '{}.png'.format(normalised))
-    if os.path.exists(bundled_tc):
-        return bundled_tc
+    # 1. Bundled icon -- exact name, title-cased, then sanitized versions
+    #    of both (for a genre name with a character invalid in a Windows
+    #    filename, e.g. the colon in "KR: Korean TV Shows").
+    for candidate in (stripped, normalised, sanitized, sanitized_tc):
+        bundled = os.path.join(ADDON_PATH, 'resources', 'images', 'genres', '{}.png'.format(candidate))
+        if os.path.exists(bundled):
+            return bundled
 
     # 2. External resource addon
     for candidate in (normalised, genre_name.strip()):
@@ -1151,8 +592,9 @@ def _apply_buffer(buffer_secs):
     Strategy:
       1. Poll until xbmc.Player.isPlaying() — up to 12 seconds.
       2. Pause.
-      3. Sleep buffer_secs silently — no toast, no dialog.
-      4. Resume — but only if the player is still paused.
+      3. Show a 'Buffering' notification toast.
+      4. Sleep buffer_secs.
+      5. Resume — but only if the player is still paused.
          xbmc.Player.isPaused() does NOT exist in Kodi Omega; use
          xbmc.getCondVisibility('Player.Paused') instead.
 
@@ -1278,52 +720,28 @@ def _tag_episode(li, title, series_name='', season_num=0, ep_num=0,
 # Root view
 # ---------------------------------------------------------------------------
 
-def list_root(update_listing=False):
-    """v4.0.0 root menu — four entries, kept clean.
+def list_root():
+    if not credentials_ok():
+        return
 
-      Movies   - Xtream Codes VOD movies catalog
-      Series   - Xtream Codes VOD series catalog
-      Stream   - Live Wrestling, Wrestling Rewind, WoD, FoD, all Pluto USA categories
-      Tools    - Backup / Restore / Refresh-Cache utilities
-
-    Top-level icons use the bundled genre-icon system.  These will look
-    placeholder-ish in skins that show a preview pane (the band-with-text
-    template is fine in list rows but small in poster panels) — Echo plans
-    to revisit with hand-drawn icons later.  Until then, consistency
-    matters more than polish.
-    """
     xbmcplugin.setPluginCategory(HANDLE, 'Echo OnDemand')
-    # 'addons' suppresses the episode info panel (control 8001 in View_50_List.xml)
-    # which shows for 'videos' content and leaves an empty text box below the icon.
-    # 'addons' renders the addon icon cleanly in the simple poster panel instead.
-    xbmcplugin.setContent(HANDLE, 'addons')
+    xbmcplugin.setContent(HANDLE, 'videos')
 
-    icon = _menu_icon('Movies')
     li = xbmcgui.ListItem(label='Movies', offscreen=True)
-    li.setArt({'icon': icon, 'thumb': icon, 'fanart': ADDON_FANART})
+    li.setArt({'icon': ADDON_ICON, 'thumb': ADDON_ICON, 'fanart': ADDON_FANART})
     xbmcplugin.addDirectoryItem(HANDLE, build_url(mode='movie_cats'), li, isFolder=True)
 
-    icon = _menu_icon('Series')
     li = xbmcgui.ListItem(label='Series', offscreen=True)
-    li.setArt({'icon': icon, 'thumb': icon, 'fanart': ADDON_FANART})
+    li.setArt({'icon': ADDON_ICON, 'thumb': ADDON_ICON, 'fanart': ADDON_FANART})
     xbmcplugin.addDirectoryItem(HANDLE, build_url(mode='series_cats'), li, isFolder=True)
 
-    # Stream — Live Wrestling + Wrestling Rewind + WoD + FoD + all Pluto USA
-    # categories.  See list_stream() for the full layout.  Replaces the v3.x
-    # arrangement where WR / WoD / FoD sat at the top level alongside Live.
-    icon = _menu_icon('Stream')
-    li = xbmcgui.ListItem(label='Stream', offscreen=True)
-    li.setArt({'icon': icon, 'thumb': icon, 'fanart': ADDON_FANART})
-    xbmcplugin.addDirectoryItem(HANDLE, build_url(mode='list_stream'), li, isFolder=True)
+    # Pinned to bottom of the list so it stays out of the way.
+    li = xbmcgui.ListItem(label='Refresh / Clear Cache', offscreen=True)
+    li.setArt({'icon': ADDON_ICON, 'fanart': ADDON_FANART})
+    li.setProperty('SpecialSort', 'bottom')
+    xbmcplugin.addDirectoryItem(HANDLE, build_url(mode='refresh'), li, isFolder=False)
 
-    # Tools — Backup / Restore / Refresh-Cache.  Pulled out of the root in
-    # v4.0.0 so the main menu is clean (4 entries).  See list_tools().
-    icon = _menu_icon('Tools')
-    li = xbmcgui.ListItem(label='Tools', offscreen=True)
-    li.setArt({'icon': icon, 'thumb': icon, 'fanart': ADDON_FANART})
-    xbmcplugin.addDirectoryItem(HANDLE, build_url(mode='list_tools'), li, isFolder=True)
-
-    xbmcplugin.endOfDirectory(HANDLE, updateListing=update_listing)
+    xbmcplugin.endOfDirectory(HANDLE)
 
 
 # ---------------------------------------------------------------------------
@@ -1331,46 +749,34 @@ def list_root(update_listing=False):
 # ---------------------------------------------------------------------------
 
 def list_movie_categories():
-    if not credentials_ok():
-        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
-        return
     try:
         cats = get_movie_categories()
     except Exception as e:
         xbmcgui.Dialog().ok('Echo OnDemand', 'Error loading movie categories:\n{}'.format(e))
-        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
         return
 
     xbmcplugin.setPluginCategory(HANDLE, 'Echo OnDemand \u2014 Movies')
-    # 'files' instead of 'movies' — tells the skin this is a generic folder list,
-    # not a media library view. Aeon Nox Silvo suppresses the right-side info panel
-    # for file-browser content, which prevents the genre icons being scaled up.
-    xbmcplugin.setContent(HANDLE, 'files')
+    xbmcplugin.setContent(HANDLE, 'movies')
 
     for cat in sorted(cats, key=lambda c: c.get('category_name', '').lower()):
         name   = cat.get('category_name', 'Unknown')
         cat_id = str(cat.get('category_id', ''))
         icon   = get_genre_icon(name)
         li = xbmcgui.ListItem(label=name, offscreen=True)
-        # 'icon' = small list-row badge. 'thumb' is intentionally the same so the
-        # list row renders correctly. Content type 'files' (set above) is what we
-        # rely on to suppress the skin's large right-panel info slot — skins treat
-        # file-browser views differently from movie/tvshow library views.
         li.setArt({'icon': icon, 'thumb': icon, 'fanart': ADDON_FANART})
         xbmcplugin.addDirectoryItem(
-            HANDLE, build_url(mode='movies', cat_id=cat_id, cat_name=name), li, isFolder=True
+            HANDLE, build_url(mode='movies', cat_id=cat_id), li, isFolder=True
         )
 
     xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_LABEL)
     xbmcplugin.endOfDirectory(HANDLE)
 
 
-def list_movies(cat_id, cat_name=''):
+def list_movies(cat_id):
     try:
         movies = get_movies_for_category(cat_id)
     except Exception as e:
         xbmcgui.Dialog().ok('Echo OnDemand', 'Error loading movies:\n{}'.format(e))
-        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
         return
 
     if not movies:
@@ -1378,9 +784,6 @@ def list_movies(cat_id, cat_name=''):
         xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
         return
 
-    xbmcplugin.setPluginCategory(
-        HANDLE, 'Echo OnDemand \u2014 {}'.format(cat_name if cat_name else 'Movies')
-    )
     xbmcplugin.setContent(HANDLE, 'movies')
 
     # Always load TMDB cache — it's just a local JSON read, zero API calls.
@@ -1421,15 +824,9 @@ def list_movies(cat_id, cat_name=''):
 
 def play_movie(vod_id, ext, vod_name='', vod_year=0):
     """
-    Resolve movie stream URL, apply pre-buffer, then fetch and cache TMDB fanart.
-
-    Order is intentional:
-      1. setResolvedUrl  — Kodi begins loading the stream immediately.
-      2. _apply_buffer   — polls for playback start, pauses, sleeps, resumes.
-      3. TMDB fetch      — runs after the buffer ends; the plugin process stays
-                           alive after setResolvedUrl so this executes while the
-                           stream is already playing. Zero impact on perceived
-                           buffer length.
+    Resolve movie stream, then — during the pre-buffer pause — fetch and cache
+    TMDB fanart for this movie if a key is configured and it's not already cached.
+    The TMDB call is absorbed into the buffer window; no extra wait for the user.
     """
     username, password = get_credentials()
     stream_url = '{}/movie/{}/{}/{}.{}'.format(SERVER, username, password, vod_id, ext)
@@ -1437,10 +834,11 @@ def play_movie(vod_id, ext, vod_name='', vod_year=0):
     li = xbmcgui.ListItem(path=stream_url)
     li.setContentLookup(False)
     xbmcplugin.setResolvedUrl(HANDLE, True, li)
-    _apply_buffer(get_buffer_secs())
-    # TMDB fetch runs after the buffer completes — result cached for future list loads.
+    # Fetch TMDB fanart in the background while the player is starting up —
+    # result is cached so subsequent list loads show the backdrop immediately.
     if vod_name and _tmdb_key():
         fetch_and_cache_tmdb_fanart(vod_name, vod_year)
+    _apply_buffer(get_buffer_secs())
 
 
 def play_episode(ep_id, ext):
@@ -1459,42 +857,34 @@ def play_episode(ep_id, ext):
 # ---------------------------------------------------------------------------
 
 def list_series_categories():
-    if not credentials_ok():
-        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
-        return
     try:
         cats = get_series_categories()
     except Exception as e:
         xbmcgui.Dialog().ok('Echo OnDemand', 'Error loading series categories:\n{}'.format(e))
-        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
         return
 
     xbmcplugin.setPluginCategory(HANDLE, 'Echo OnDemand \u2014 Series')
-    # Same rationale as movie categories — 'files' to suppress skin info panel.
-    xbmcplugin.setContent(HANDLE, 'files')
+    xbmcplugin.setContent(HANDLE, 'tvshows')
 
     for cat in sorted(cats, key=lambda c: c.get('category_name', '').lower()):
         name   = cat.get('category_name', 'Unknown')
         cat_id = str(cat.get('category_id', ''))
         icon   = get_genre_icon(name)
         li = xbmcgui.ListItem(label=name, offscreen=True)
-        # Same as movie categories — genre badge in icon slot, Content(files) drives
-        # right-panel suppression at the skin level.
         li.setArt({'icon': icon, 'thumb': icon, 'fanart': ADDON_FANART})
         xbmcplugin.addDirectoryItem(
-            HANDLE, build_url(mode='series', cat_id=cat_id, cat_name=name), li, isFolder=True
+            HANDLE, build_url(mode='series', cat_id=cat_id), li, isFolder=True
         )
 
     xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_LABEL)
     xbmcplugin.endOfDirectory(HANDLE)
 
 
-def list_series(cat_id, cat_name=''):
+def list_series(cat_id):
     try:
         series_list = get_series_for_category(cat_id)
     except Exception as e:
         xbmcgui.Dialog().ok('Echo OnDemand', 'Error loading series:\n{}'.format(e))
-        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
         return
 
     if not series_list:
@@ -1502,9 +892,6 @@ def list_series(cat_id, cat_name=''):
         xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
         return
 
-    xbmcplugin.setPluginCategory(
-        HANDLE, 'Echo OnDemand \u2014 {}'.format(cat_name if cat_name else 'Series')
-    )
     xbmcplugin.setContent(HANDLE, 'tvshows')
 
     for s in sorted(series_list, key=lambda x: x.get('name', '').lower()):
@@ -1541,8 +928,10 @@ def list_series(cat_id, cat_name=''):
 
 def list_seasons(series_id):
     """
-    One folder per season.
-    Uses 'seasons' list from API for names/art; falls back to 'episodes' dict keys.
+    One folder per season. Primarily driven by the 'episodes' dict (so the
+    episode count shown is accurate); if a series has season metadata but
+    no episodes synced yet, falls back to building season folders straight
+    from the 'seasons' API list instead of showing nothing.
     Series-level backdrop is carried through to every season item so the
     show's fanart stays on screen when the user drills into seasons.
     """
@@ -1550,7 +939,6 @@ def list_seasons(series_id):
         info = get_series_info(series_id)
     except Exception as e:
         xbmcgui.Dialog().ok('Echo OnDemand', 'Error loading series info:\n{}'.format(e))
-        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
         return
 
     series_meta = info.get('info', {})
@@ -1567,7 +955,7 @@ def list_seasons(series_id):
     series_cover   = series_meta.get('cover', '')
 
     xbmcplugin.setPluginCategory(HANDLE, 'Echo OnDemand \u2014 {}'.format(series_name))
-    xbmcplugin.setContent(HANDLE, 'seasons')
+    xbmcplugin.setContent(HANDLE, 'tvshows')
 
     season_meta = {}
     for s in seasons_api:
@@ -1578,8 +966,13 @@ def list_seasons(series_id):
                 'cover': s.get('cover', ''),
             }
 
-    for season_num in sorted(episodes.keys(), key=lambda x: safe_int(x)):
-        ep_list = episodes[season_num]
+    # Normally driven by 'episodes' (gives an accurate per-season episode
+    # count); if that's empty but the API gave us season metadata anyway,
+    # fall back to it so the show isn't left with an empty season list.
+    season_nums = episodes.keys() if episodes else season_meta.keys()
+
+    for season_num in sorted(season_nums, key=lambda x: safe_int(x)):
+        ep_list = episodes.get(season_num, [])
         meta    = season_meta.get(season_num, {})
         label   = meta.get('name') or 'Season {}'.format(season_num)
         # Use season-specific cover if available; fall back to series cover.
@@ -1606,7 +999,6 @@ def list_episodes(series_id, season_num):
         info = get_series_info(series_id)
     except Exception as e:
         xbmcgui.Dialog().ok('Echo OnDemand', 'Error loading episodes:\n{}'.format(e))
-        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
         return
 
     series_meta  = info.get('info', {})
@@ -1624,11 +1016,6 @@ def list_episodes(series_id, season_num):
         HANDLE, 'Echo OnDemand \u2014 {} S{}'.format(series_name, season_num)
     )
     xbmcplugin.setContent(HANDLE, 'episodes')
-
-    if not episodes:
-        xbmcgui.Dialog().notification('Echo OnDemand', 'No episodes found for this season.', time=3000)
-        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
-        return
 
     def ep_sort_key(ep):
         return safe_int(ep.get('episode_num', 0))
@@ -1669,884 +1056,13 @@ def list_episodes(series_id, season_num):
 
 
 # ---------------------------------------------------------------------------
-# MicroJen feed views — Wrestling Rewind, Wrestling on Demand, Fights on Demand
-# ---------------------------------------------------------------------------
-# All three sources use the same MicroJen XML/JSON format.  list_wr() and
-# play_wr() are source-agnostic — they just walk whatever feed URL is handed
-# to them.  list_static_menu() handles the curated WOD/FOD category trees
-# defined in STATIC_MENUS at the top of this file.
-#
-# Feed fetching, parsing, and link resolution are delegated to
-# resources/lib/wrestling.py (pure data layer).
-#
-# All views follow the same patterns as the rest of this file: profile-dir
-# caching, error dialogs, setContent('files'), _apply_buffer at play time.
-
-
-def _wr_ttl():
-    """MicroJen feed cache TTL — fixed at 30 minutes for all three sources."""
-    return 1800
-
-
-# ---------------------------------------------------------------------------
-# Pluto TV HLS header workaround
-# ---------------------------------------------------------------------------
-# Pluto's stitcher CDN inspects the User-Agent on manifest and segment
-# fetches.  We set it to match the AppleTV native Pluto app's UA (defined
-# in pluto.BROWSER_UA) — this matches the endpoint that pluto.py's
-# resolver targets via jmp2.uk redirect, and it's the User-Agent that
-# stitcher endpoint expects.
-#
-# v3.2.0 simplification: previously we sent web-shaped headers
-# (Origin, Referer, Accept, sec-ch-ua, ...) trying to look like a browser
-# tab.  That was for the WEB stitcher endpoint, which enforces CORS.
-# The AppleTV-app endpoint we now target is non-CORS and only checks
-# User-Agent — so all the browser pretense is unnecessary and might
-# actually look suspicious (an "AppleTV app" sending an Origin header
-# is anomalous).  Down to one header.
-#
-# Non-Pluto HLS streams (WWE Network on CloudFront, etc.) skip header
-# injection entirely — _is_pluto_url gates the whole block in
-# _apply_isa_properties.
-
-_PLUTO_HEADERS = urlencode({
-    'User-Agent': _pluto.BROWSER_UA,
-}, quote_via=quote)   # %20 for spaces, not '+' — quote is correct for HTTP headers
-
-
-# Wire pluto.py's and pluto_catalog.py's diagnostic logging into Kodi's log.
-# Both modules use string levels ('INFO', 'WARN', 'ERROR') so they can stay
-# free of Kodi imports; we translate to xbmc.LOG* here.  These calls run
-# once at module import time.
-def _bridge_pluto_logger(msg, level='INFO'):
-    levelmap = {
-        'INFO':  xbmc.LOGINFO,
-        'WARN':  xbmc.LOGWARNING,
-        'ERROR': xbmc.LOGERROR,
-    }
-    log(msg, levelmap.get(level, xbmc.LOGINFO))
-
-_pluto.set_logger(_bridge_pluto_logger)
-_catalog.set_logger(_bridge_pluto_logger)
-
-
-def _looks_like_hls(url):
-    """True if URL is most likely an HLS stream.
-
-    Looks for the canonical .m3u8 manifest extension anywhere in the URL,
-    plus the Pluto TV stitcher path which serves HLS even when the .m3u8
-    suffix is buried inside query parameters.
-    """
-    if not isinstance(url, str):
-        return False
-    u = url.lower()
-    return '.m3u8' in u or 'pluto.tv/stitch/hls/' in u
-
-
-def _is_pluto_url(url):
-    """True if URL is served from Pluto's CDN.  Used to gate header injection
-    so we don't ship a fake User-Agent on every HLS request — only the ones
-    that need it."""
-    return isinstance(url, str) and 'pluto.tv' in url.lower()
-
-
-def _apply_isa_properties(li, url):
-    """Set inputstream.adaptive properties on a ListItem when the URL is HLS.
-
-    No-op when the URL doesn't look like HLS, and the properties are simply
-    ignored if inputstream.adaptive isn't installed — so this is safe to
-    call unconditionally before setResolvedUrl.
-
-    Why this exists: Kodi's built-in demuxer can fail on session-bound HLS
-    streams, particularly Pluto TV's stitcher (which is what backs WOD's
-    live wrestling channels — see live.xml).  ISA's HLS handler is more
-    forgiving with these.
-
-    Pluto TV detail: Pluto's edge servers reject non-browser clients with
-    HTTP 403, so for pluto.tv URLs we also set manifest_headers and
-    stream_headers with a Chrome-shaped User-Agent and Referer.  These
-    properties are namespaced under inputstream.adaptive and ignored by
-    other inputstream addons, so they're scoped correctly.
-
-    Note: as of Kodi 21 (Omega), inputstream.adaptive auto-detects manifest
-    type from the response Content-Type / extension.  We previously set
-    `inputstream.adaptive.manifest_type=hls` and Kodi logged a deprecation
-    warning; that property is now omitted.
-    """
-    if not _looks_like_hls(url):
-        return
-    li.setProperty('inputstream', 'inputstream.adaptive')
-    if _is_pluto_url(url):
-        li.setProperty('inputstream.adaptive.manifest_headers', _PLUTO_HEADERS)
-        li.setProperty('inputstream.adaptive.stream_headers',   _PLUTO_HEADERS)
-
-
-def _format_epg_plot(chan):
-    """Build a multi-line plot string from a channel's EPG data.
-
-    mjh's catalog provides each channel's `programs` array as a list of
-    [iso_timestamp, title] pairs.  We extract the next 5 upcoming entries
-    and format them as:
-
-        [10:00am] SportsCenter
-        [11:00am] First Take
-        [12:00pm] Around the Horn
-
-    Past entries are skipped (their next-entry-start is already behind us).
-    Falls back to the channel's `description` field when no upcoming
-    programs are available, or to empty string if neither exists.
-
-    Returns a plain string suitable for setPlot().  Times are rendered in
-    the user's local timezone using time.localtime() — no external library
-    needed and it matches what other Kodi addons do.
-    """
-    progs = chan.get('programs') or []
-    if not isinstance(progs, list) or not progs:
-        return chan.get('description') or ''
-
-    now = time.time()
-    upcoming = []
-    for i, entry in enumerate(progs):
-        if not isinstance(entry, (list, tuple)) or len(entry) < 2:
-            continue
-        ts_str, title = entry[0], entry[1]
-        start = _parse_iso_to_epoch(ts_str)
-        if start is None:
-            continue
-        # End of program = start of next entry, or +1hr fallback.
-        end = None
-        if i + 1 < len(progs):
-            try:
-                end = _parse_iso_to_epoch(progs[i + 1][0])
-            except Exception:
-                end = None
-        if end is None:
-            end = start + 3600
-        if end < now:
-            continue   # already over
-        upcoming.append((start, title))
-        if len(upcoming) >= 5:
-            break
-
-    if not upcoming:
-        return chan.get('description') or ''
-
-    lines = []
-    for ts, title in upcoming:
-        lt = time.localtime(ts)
-        h, m = lt.tm_hour, lt.tm_min
-        if h == 0:
-            disp = '12:{:02d}am'.format(m)
-        elif h < 12:
-            disp = '{}:{:02d}am'.format(h, m)
-        elif h == 12:
-            disp = '12:{:02d}pm'.format(m)
-        else:
-            disp = '{}:{:02d}pm'.format(h - 12, m)
-        lines.append('[{}] {}'.format(disp, title))
-    return '\n'.join(lines)
-
-
-def _parse_iso_to_epoch(s):
-    """Parse an ISO-8601 timestamp like '2026-05-09T10:00:00Z' (or with
-    millisecond precision and offset) into a unix epoch timestamp.
-    Returns None on any failure — caller falls back gracefully.
-
-    Stays simple: we only need to compare timestamps to time.time() for
-    EPG filtering, so timezone parsing is best-effort.  Strings ending
-    in 'Z' are UTC; the calendar.timegm path handles those.  Anything
-    else with an offset is parsed by stripping the offset (close enough
-    for "is this in the past or future" decisions).
-    """
-    if not isinstance(s, str) or not s:
-        return None
-    import calendar
-    # Strip fractional seconds and timezone, if any.
-    base = s.replace('Z', '')
-    if '.' in base:
-        base = base.split('.', 1)[0]
-    if '+' in base:
-        base = base.split('+', 1)[0]
-    if base.count('-') > 2:
-        # offset like '...10:00:00-05:00' — split off the trailing offset
-        idx = base.rfind('-')
-        if idx > 10:   # past the date hyphens
-            base = base[:idx]
-    try:
-        tm = time.strptime(base, '%Y-%m-%dT%H:%M:%S')
-    except Exception:
-        return None
-    return calendar.timegm(tm)
-
-
-def list_stream():
-    """Render the Stream root menu (v4.0.0 — replaces v3.x list_live).
-
-    Static block at the top (in this fixed order — chosen for "live first,
-    then replays" flow):
-
-      1. Live Wrestling            (WOD's live.xml feed)
-      2. Wrestling Rewind          (mylostsoulspace.co.uk feed)
-      3. Wrestling on Demand       (STATIC_MENUS['wod_root'])
-      4. Fights on Demand          (STATIC_MENUS['fod_root'])
-
-    Below that: Pluto USA channel groups in alphabetical order, discovered
-    from mjh's catalog (Sports, News, Entertainment, ...).
-
-    If the catalog fetch fails (mjh down, no network), only the static
-    block shows.  A friendly notification surfaces the failure but doesn't
-    block — Live Wrestling and the curated WoD/FoD trees still work
-    independently of the catalog.
-    """
-    xbmcplugin.setPluginCategory(HANDLE, 'Echo OnDemand \u2014 Stream')
-    xbmcplugin.setContent(HANDLE, 'files')
-
-    # ----- Static block: Live Wrestling + WR + WoD + FoD ----------
-
-    # Live Wrestling — STATIC_MENUS['live_root'] (one entry; iterating
-    # rather than hardcoding lets future additions land cleanly).
-    for entry in STATIC_MENUS.get('live_root', []):
-        title     = entry.get('title', 'Unknown')
-        icon_path = _menu_icon(entry.get('icon_label', ''))
-        li = xbmcgui.ListItem(label=title, offscreen=True)
-        li.setArt({'thumb': icon_path, 'icon': icon_path, 'fanart': ADDON_FANART})
-        if 'wr_url' in entry:
-            target = build_url(mode='wr_list', wr_url=entry['wr_url'], wr_title=title)
-            xbmcplugin.addDirectoryItem(HANDLE, target, li, isFolder=True)
-
-    # Wrestling Rewind — single feed URL drives the whole tree.
-    # Soft-coded: settings 'wr_root_url' overrides the default if present
-    # (see HANDOFF.md re: pointing at a mirror without a code change).
-    wr_root = ADDON.getSetting('wr_root_url').strip()
-    if not wr_root:
-        wr_root = 'https://mylostsoulspace.co.uk/WrestlingRewind/xmls/wrestlingrewind-main.xml'
-    icon = _menu_icon('Wrestling')   # generic Wrestling.png — covers WR root
-    li = xbmcgui.ListItem(label='Wrestling Rewind', offscreen=True)
-    li.setArt({'icon': icon, 'thumb': icon, 'fanart': ADDON_FANART})
-    xbmcplugin.addDirectoryItem(
-        HANDLE,
-        build_url(mode='wr_list', wr_url=wr_root, wr_title='Wrestling Rewind'),
-        li, isFolder=True
-    )
-
-    # Wrestling on Demand — curated tree from STATIC_MENUS['wod_root'].
-    icon = _menu_icon('Wrestling on Demand')
-    li = xbmcgui.ListItem(label='Wrestling on Demand', offscreen=True)
-    li.setArt({'icon': icon, 'thumb': icon, 'fanart': ADDON_FANART})
-    xbmcplugin.addDirectoryItem(
-        HANDLE,
-        build_url(mode='static_menu', key='wod_root', title='Wrestling on Demand'),
-        li, isFolder=True
-    )
-
-    # Fights on Demand — curated tree from STATIC_MENUS['fod_root'].
-    icon = _menu_icon('Fights on Demand')
-    li = xbmcgui.ListItem(label='Fights on Demand', offscreen=True)
-    li.setArt({'icon': icon, 'thumb': icon, 'fanart': ADDON_FANART})
-    xbmcplugin.addDirectoryItem(
-        HANDLE,
-        build_url(mode='static_menu', key='fod_root', title='Fights on Demand'),
-        li, isFolder=True
-    )
-
-    # ----- Dynamic block: Pluto USA channel groups ----------
-
-    catalog = _catalog.get_catalog()
-    if catalog is None:
-        xbmcgui.Dialog().notification(
-            'Echo OnDemand',
-            'Could not load Pluto channel catalog.',
-            time=3000
-        )
-        xbmcplugin.endOfDirectory(HANDLE)
-        return
-
-    groups = _catalog.usa_groups(catalog)
-    if not groups:
-        log('list_stream: catalog has no USA channels', xbmc.LOGWARNING)
-        xbmcplugin.endOfDirectory(HANDLE)
-        return
-
-    for group_name in sorted(groups.keys(), key=str.lower):
-        count     = groups[group_name]
-        icon_path = _menu_icon(group_name)
-        li = xbmcgui.ListItem(label=group_name, offscreen=True)
-        li.setArt({'icon': icon_path, 'thumb': icon_path, 'fanart': ADDON_FANART})
-        li.getVideoInfoTag().setPlot(
-            '{} channel{}'.format(count, '' if count == 1 else 's')
-        )
-        target = build_url(mode='pluto_chans', group=group_name)
-        xbmcplugin.addDirectoryItem(HANDLE, target, li, isFolder=True)
-
-    xbmcplugin.endOfDirectory(HANDLE)
-
-
-def list_tools():
-    """Render the Tools menu — Backup / Restore / Refresh-Cache.
-
-    Pulled out of the v3.x root menu in v4.0.0 to keep the main menu
-    clean (Movies / Series / Stream / Tools).  Same actions, same routes
-    — only the navigation path changed.
-    """
-    xbmcplugin.setPluginCategory(HANDLE, 'Echo OnDemand \u2014 Tools')
-    xbmcplugin.setContent(HANDLE, 'files')
-
-    # Backup — writes settings + caches to special://userdata/, one level
-    # above the addon's profile dir, so it survives addon uninstall.
-    icon = _menu_icon('Tools')
-    li = xbmcgui.ListItem(label='Backup Settings', offscreen=True)
-    li.setArt({'icon': icon, 'thumb': icon, 'fanart': ADDON_FANART})
-    xbmcplugin.addDirectoryItem(
-        HANDLE, build_url(mode='settings_backup'), li, isFolder=False
-    )
-
-    li = xbmcgui.ListItem(label='Restore Settings', offscreen=True)
-    li.setArt({'icon': icon, 'thumb': icon, 'fanart': ADDON_FANART})
-    xbmcplugin.addDirectoryItem(
-        HANDLE, build_url(mode='settings_restore'), li, isFolder=False
-    )
-
-    li = xbmcgui.ListItem(label='Refresh / Clear Cache', offscreen=True)
-    li.setArt({'icon': icon, 'thumb': icon, 'fanart': ADDON_FANART})
-    xbmcplugin.addDirectoryItem(HANDLE, build_url(mode='refresh'), li, isFolder=True)
-
-    xbmcplugin.endOfDirectory(HANDLE)
-
-
-def list_pluto_channels(group_name):
-    """Render channels in a single Pluto USA category.
-
-    Channels are sorted alphabetically by name (case-insensitive).  Each
-    channel becomes a playable item routing to play_pluto with its 24-char
-    ID.  Channel logo + art come straight from mjh's catalog (Pluto's own
-    CDN-hosted assets).  EPG plot built from the catalog's `programs`
-    array via _format_epg_plot.
-
-    The category name comes from the URL — we look it up in the cached
-    catalog rather than passing data through the URL.  If the catalog
-    has aged out between the user clicking the category and us getting
-    here, it'll re-fetch transparently.
-    """
-    if not group_name:
-        log('list_pluto_channels: empty group name', xbmc.LOGWARNING)
-        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
-        return
-
-    xbmcplugin.setPluginCategory(HANDLE,
-        'Echo OnDemand \u2014 Live \u2014 {}'.format(group_name))
-    xbmcplugin.setContent(HANDLE, 'videos')
-
-    catalog = _catalog.get_catalog()
-    if catalog is None:
-        xbmcgui.Dialog().notification(
-            'Echo OnDemand',
-            'Could not load Pluto channel catalog.',
-            time=3000
-        )
-        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
-        return
-
-    channels = _catalog.channels_in_group(catalog, group_name)
-    if not channels:
-        log('list_pluto_channels: no channels in group "{}"'.format(group_name),
-            xbmc.LOGWARNING)
-        xbmcplugin.endOfDirectory(HANDLE)
-        return
-
-    for chan in sorted(channels, key=lambda c: (c.get('name') or '').lower()):
-        name = chan.get('name') or 'Unknown'
-        logo = chan.get('logo') or ADDON_ICON
-        art  = chan.get('art')  or ADDON_FANART
-
-        li = xbmcgui.ListItem(label=name, offscreen=True)
-        li.setArt({'thumb': logo, 'icon': logo, 'fanart': art})
-        plot = _format_epg_plot(chan)
-        if plot:
-            li.getVideoInfoTag().setPlot(plot)
-        li.getVideoInfoTag().setMediaType('video')
-        li.setProperty('IsPlayable', 'true')
-
-        target = build_url(mode='play_pluto', channel_id=chan['id'], title=name)
-        xbmcplugin.addDirectoryItem(HANDLE, target, li, isFolder=False)
-
-    xbmcplugin.endOfDirectory(HANDLE)
-
-
-def list_static_menu(menu_key, menu_title):
-    """
-    Render a hardcoded category tree from STATIC_MENUS.
-
-    Each entry is rendered as either a folder or a playable item:
-      * 'wr_url' present     → folder, routes into list_wr against feed XML.
-      * 'menu_key' present   → folder, routes into another static menu.
-      * 'channel_id' present → playable item, routes to play_pluto with that ID.
-
-    No network I/O, no caching — STATIC_MENUS is plain Python data.
-
-    setContent('files') matches list_wr below; the skin's right-side info
-    panel stays suppressed in Aeon Nox Silvo for a uniform look-and-feel.
-    """
-    entries = STATIC_MENUS.get(menu_key)
-    if not entries:
-        log('list_static_menu: unknown menu key "{}"'.format(menu_key),
-            xbmc.LOGWARNING)
-        xbmcgui.Dialog().notification(
-            'Echo OnDemand', 'Menu not found.', time=3000
-        )
-        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
-        return
-
-    xbmcplugin.setPluginCategory(HANDLE, 'Echo OnDemand \u2014 {}'.format(menu_title))
-    xbmcplugin.setContent(HANDLE, 'files')
-
-    for entry in entries:
-        title     = entry.get('title', 'Unknown')
-        icon_path = _menu_icon(entry.get('icon_label', ''))
-
-        li = xbmcgui.ListItem(label=title, offscreen=True)
-        li.setArt({'thumb': icon_path, 'icon': icon_path, 'fanart': ADDON_FANART})
-
-        if 'wr_url' in entry:
-            # Leaf — drills into list_wr against the feed XML.
-            target_url = build_url(
-                mode='wr_list', wr_url=entry['wr_url'], wr_title=title
-            )
-            is_folder = True
-        elif 'menu_key' in entry:
-            # Branch — drills into another static menu.
-            target_url = build_url(
-                mode='static_menu', key=entry['menu_key'], title=title
-            )
-            is_folder = True
-        elif 'channel_id' in entry:
-            # Playable Pluto channel — resolved at play time via pluto.py.
-            li.setProperty('IsPlayable', 'true')
-            target_url = build_url(
-                mode='play_pluto', channel_id=entry['channel_id'], title=title
-            )
-            is_folder = False
-        else:
-            # Malformed entry — skip rather than break the whole listing.
-            log('list_static_menu: entry "{}" has none of wr_url / menu_key / channel_id'
-                .format(title), xbmc.LOGWARNING)
-            continue
-
-        xbmcplugin.addDirectoryItem(HANDLE, target_url, li, isFolder=is_folder)
-
-    xbmcplugin.endOfDirectory(HANDLE)
-
-
-def list_wr(wr_url, wr_title='Wrestling Rewind'):
-    """
-    Fetch and display one level of a MicroJen feed (Wrestling Rewind, WOD, FOD).
-
-    Folders (type=dir) route back to list_wr with the sub-feed URL.
-    Playable items (type=item) route to play_wr with the item encoded as
-    base64 JSON — handles list-typed link fields (sublinks) cleanly in a
-    single URL parameter.
-
-    v2.6.0 enhancements vs 2.5.0:
-      - item-type entries with empty links are now skipped (previously listed
-        but unplayable on click)
-      - dir-type entries with list-typed links use the first list element
-        (was urlencoding the list into a broken navigation URL)
-      - item-level thumbnail/fanart used when present (was always ADDON_ICON)
-      - title format tags stripped for clean display (handles WOD/FOD BBCode)
-      - Plot infotag set when item has a summary (Info popup works; right
-        panel suppression unchanged because it depends on setContent('files'))
-    """
-    profile = _profile_dir()
-    ttl     = _wr_ttl()
-
-    text = _wr.cache_load(profile, wr_url, ttl)
-    if text is None:
-        try:
-            text = _wr.fetch_feed(wr_url)
-            _wr.cache_save(profile, wr_url, text)
-        except Exception as e:
-            xbmcgui.Dialog().ok(
-                'Echo OnDemand', 'Error loading feed:\n{}'.format(e)
-            )
-            xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
-            return
-
-    items = _wr.parse_feed(wr_url, text)
-
-    if not items:
-        xbmcgui.Dialog().notification(
-            'Echo OnDemand', 'No items found in this section.', time=3000
-        )
-        xbmcplugin.endOfDirectory(HANDLE, succeeded=False)
-        return
-
-    xbmcplugin.setPluginCategory(HANDLE, 'Echo OnDemand \u2014 {}'.format(wr_title))
-    xbmcplugin.setContent(HANDLE, 'files')
-
-    # Detect whether this is a Wrestling Rewind feed.  Used for two
-    # behavioral overrides (v4.0.0):
-    #   1) Filter out the upstream "Settings" entry that WR's own XML
-    #      includes (it's an internal/admin link, not a watchable feed).
-    #   2) Force ADDON_FANART for every item so the background stays
-    #      consistent as the user navigates.  WR's per-item fanart
-    #      varies wildly between sections, which causes flicker.
-    # WoD and FoD are unaffected — they keep using item-level fanart.
-    is_wr = 'wrestlingrewind' in (wr_url or '').lower()
-
-    for item in items:
-        item_type = item.get('type', 'item')
-        raw_title = item.get('title', 'Unknown')
-        # Strip BBCode-style format tags ([COLOR ...], [B], [I], etc.) that
-        # WOD / FOD sometimes embed.  Wrestling Rewind titles pass through
-        # unchanged because they don't use these tags.
-        title     = _wr.strip_format_tags(raw_title) or 'Unknown'
-        raw_link  = item.get('link', '')
-
-        # WR-only: skip the upstream "Settings" entry.  Match on the
-        # cleaned title (case-insensitive) so any BBCode wrapping is
-        # already removed.  Restricted to WR feeds so a WoD/FoD feed
-        # legitimately containing a "Settings" entry wouldn't be hidden.
-        if is_wr and title.strip().lower() == 'settings':
-            log('list_wr: filtering WR Settings entry', xbmc.LOGINFO)
-            continue
-
-        # Skip ANY entry with an empty link — for dir items they'd navigate
-        # to a broken URL, for item-type they'd hit "No playable link" on click.
-        if not raw_link:
-            log('list_wr: skipping {} "{}" \u2014 empty link'.format(
-                item_type, title), xbmc.LOGWARNING)
-            continue
-
-        # Pick item-level art when present, addon defaults otherwise.
-        # WR exception: always use ADDON_FANART for fanart consistency
-        # (item-level fanart varies and causes background flicker).
-        thumb_url  = (item.get('thumbnail') or '').strip() or ADDON_ICON
-        if is_wr:
-            fanart_url = ADDON_FANART
-        else:
-            fanart_url = (item.get('fanart') or '').strip() or ADDON_FANART
-        summary    = (item.get('summary')   or '').strip()
-
-        li = xbmcgui.ListItem(label=title, offscreen=True)
-        li.setArt({'thumb': thumb_url, 'icon': thumb_url, 'fanart': fanart_url})
-
-        if item_type == 'dir':
-            # A dir's link is normally a single feed-XML URL.  If the parser
-            # produced a list (rare but possible per the schema), take the
-            # first element rather than letting urlencode mangle the list.
-            dir_link = raw_link[0] if isinstance(raw_link, list) and raw_link else raw_link
-            if not isinstance(dir_link, str) or not dir_link:
-                log('list_wr: dir "{}" has unusable link, skipping'.format(title),
-                    xbmc.LOGWARNING)
-                continue
-            target_url = build_url(mode='wr_list', wr_url=dir_link, wr_title=title)
-            xbmcplugin.addDirectoryItem(HANDLE, target_url, li, isFolder=True)
-        else:
-            # Playable item.  If a summary is present, expose it through
-            # InfoTagVideo so pressing Info shows context.  setContent('files')
-            # is unchanged so Aeon Nox Silvo still suppresses the right panel.
-            if summary:
-                tag = li.getVideoInfoTag()
-                tag.setMediaType('video')
-                tag.setTitle(title)
-                tag.setPlot(summary)
-
-            payload = {
-                'title': title,
-                'link':  raw_link,
-            }
-            encoded = base64.urlsafe_b64encode(
-                json.dumps(payload).encode('utf-8')
-            ).decode('utf-8')
-            li.setProperty('IsPlayable', 'true')
-            target_url = build_url(mode='wr_play', wr_item=encoded)
-            xbmcplugin.addDirectoryItem(HANDLE, target_url, li, isFolder=False)
-
-    xbmcplugin.endOfDirectory(HANDLE)
-
-
-def _pluto_resolver_enabled():
-    """Read the kill-switch setting.  Default true.  Returns False only
-    when the user has explicitly turned the resolver off in settings."""
-    val = (ADDON.getSetting('pluto_resolver_enabled') or 'true').strip().lower()
-    return val not in ('false', '0', 'no', 'off')
-
-
-def _maybe_resolve_pluto(url, title=''):
-    """If url is a Pluto stitcher URL and the resolver is enabled, replace
-    it with a freshly-minted URL from boot.pluto.tv.  On any failure (resolver
-    disabled, no channel ID, network error, channel not in boot response)
-    return the original URL unchanged so we never make things worse than
-    v3.0.2.  Logs which path was taken so the Kodi log shows whether the
-    resolver fired or not."""
-    if not _is_pluto_url(url):
-        return url
-    if not _pluto_resolver_enabled():
-        log('play: Pluto resolver disabled by setting, using original URL', xbmc.LOGINFO)
-        return url
-
-    channel_id = _pluto.extract_channel_id(url)
-    if not channel_id:
-        log('play: Pluto URL but no channel ID extracted: {}'.format(url[:80]),
-            xbmc.LOGWARNING)
-        return url
-
-    fresh = _pluto.get_fresh_url(channel_id)
-    if not fresh:
-        log('play: Pluto resolver returned no URL for channel {} — falling back'
-            .format(channel_id), xbmc.LOGWARNING)
-        return url
-
-    log('play: Pluto channel {} resolved to fresh URL ("{}")'
-        .format(channel_id, title), xbmc.LOGINFO)
-    return fresh
-
-
-def play_wr(wr_item):
-    """
-    Resolve and play a Wrestling item.
-
-    Resolution order (handled by wrestling.resolve_best_link):
-      1. Try resolveurl on each candidate — debrid wins if available.
-      2. Fall back to any direct video URL.
-      3. Fall back to the first HTTP URL and let Kodi try it.
-
-    For Pluto TV URLs, an extra step runs after wrestling.resolve_best_link
-    — we mint a fresh stitcher URL via pluto.py.  This sidesteps the stale
-    session token problem in WOD's live.xml.  Falls back silently to the
-    original URL on any resolver failure.
-
-    Pre-buffer applied using same setting and mechanism as IPTV playback.
-    """
-    try:
-        item = json.loads(base64.urlsafe_b64decode(wr_item))
-    except Exception as e:
-        log('play_wr: failed to decode item: {}'.format(e), xbmc.LOGWARNING)
-        xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
-        return
-
-    title    = item.get('title', '')
-    raw_link = item.get('link', '')
-
-    links = _wr.normalise_links(raw_link)
-    if not links:
-        log('play_wr: no usable links in item "{}"'.format(title), xbmc.LOGWARNING)
-        xbmcgui.Dialog().notification('Echo OnDemand', 'No playable link found.', time=3000)
-        xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
-        return
-
-    url, via_debrid = _wr.resolve_best_link(links)
-
-    if not url:
-        xbmcgui.Dialog().notification('Echo OnDemand', 'Could not resolve stream.', time=3000)
-        xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
-        return
-
-    # For Pluto URLs, swap in a freshly-minted URL from boot.pluto.tv.
-    # Silent passthrough for non-Pluto URLs (e.g., WWE Network CloudFront).
-    url = _maybe_resolve_pluto(url, title)
-
-    log('play_wr: "{}" -> {} (debrid={})'.format(title, url[:60], via_debrid))
-
-    li = xbmcgui.ListItem(path=url)
-    li.setContentLookup(False)
-    # If the resolved URL is HLS (Pluto TV live channels, .m3u8 manifests),
-    # hand it to inputstream.adaptive — Kodi's built-in demuxer can fail on
-    # session-bound HLS.  No-op for direct mp4/mkv/etc. and harmless if ISA
-    # isn't installed.
-    _apply_isa_properties(li, url)
-
-    xbmcplugin.setResolvedUrl(HANDLE, True, li)
-    _apply_buffer(get_buffer_secs())
-
-
-def play_pluto(channel_id, title=''):
-    """
-    Resolve and play a Pluto TV channel directly by its channel ID.
-
-    Called from two places: list_pluto_channels (the dynamic Pluto USA
-    category browse, where the user picked a channel from one of the
-    Live → <category> lists), and historically from any STATIC_MENUS
-    entry with a 'channel_id' field.  Either way, we have a known
-    channel ID and route straight to pluto.get_fresh_url().
-
-    Failure mode: if the resolver returns no URL (network error, jmp2.uk
-    has no entry for this channel, kill switch on), show a brief
-    notification and bail.  No fallback URL exists for play_pluto entries —
-    the channel ID IS the only address we have, unlike play_wr where a
-    stitcher URL is also baked into WOD's feed.
-    """
-    if not channel_id:
-        log('play_pluto: empty channel_id', xbmc.LOGWARNING)
-        xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
-        return
-
-    if not _pluto_resolver_enabled():
-        xbmcgui.Dialog().notification(
-            'Echo OnDemand',
-            'Pluto resolver is disabled in settings.',
-            time=3000
-        )
-        log('play_pluto: resolver disabled, cannot play channel {}'.format(channel_id),
-            xbmc.LOGWARNING)
-        xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
-        return
-
-    url = _pluto.get_fresh_url(channel_id)
-    if not url:
-        xbmcgui.Dialog().notification(
-            'Echo OnDemand',
-            'Could not resolve channel.\nMay be region-locked or retired.',
-            time=4000
-        )
-        log('play_pluto: no URL for channel {} ("{}")'.format(channel_id, title),
-            xbmc.LOGWARNING)
-        xbmcplugin.setResolvedUrl(HANDLE, False, xbmcgui.ListItem())
-        return
-
-    log('play_pluto: channel {} ("{}") -> {}'.format(channel_id, title, url[:60]))
-
-    li = xbmcgui.ListItem(path=url)
-    li.setContentLookup(False)
-    _apply_isa_properties(li, url)
-
-    xbmcplugin.setResolvedUrl(HANDLE, True, li)
-    _apply_buffer(get_buffer_secs())
-
-
-# ---------------------------------------------------------------------------
-# Settings backup / restore
-# ---------------------------------------------------------------------------
-# Kodi normally preserves settings across addon upgrades — when you "Install
-# from zip" over an existing addon, userdata/addon_data/<addon_id>/settings.xml
-# is left alone.  But if a user fully uninstalls and then reinstalls (a common
-# workflow for hobbyist users sideloading zips), Kodi wipes that directory.
-#
-# Backup/Restore writes a JSON snapshot one level up — to special://userdata/
-# itself — which survives any single-addon uninstall.  The file lives at:
-#     special://userdata/echoondemand_settings.json
-#
-# Format:
-#     {
-#         "version":  1,
-#         "ts":       <unix timestamp>,
-#         "settings": { "<setting_id>": "<value>", ... }
-#     }
-#
-# Currently captures all four user-facing settings: username, password,
-# buffer_secs, tmdb_api_key.  Adding settings later is a one-line edit to
-# _BACKUP_KEYS below.
-
-_BACKUP_KEYS = ('username', 'password', 'buffer_secs', 'tmdb_api_key')
-_BACKUP_VERSION = 1
-
-
-def _backup_path():
-    """Path to the settings backup JSON, outside the addon's own userdata dir."""
-    base = xbmcvfs.translatePath('special://userdata/')
-    if isinstance(base, bytes):
-        base = base.decode('utf-8')
-    return os.path.join(base, 'echoondemand_settings.json')
-
-
-def do_settings_backup():
-    """Snapshot all _BACKUP_KEYS settings to the user-level userdata directory."""
-    snapshot = {
-        'version':  _BACKUP_VERSION,
-        'ts':       time.time(),
-        'settings': {k: ADDON.getSetting(k) for k in _BACKUP_KEYS},
-    }
-    path = _backup_path()
-    try:
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump(snapshot, f, indent=2)
-        log('Settings backup written to {}'.format(path), xbmc.LOGINFO)
-        xbmcgui.Dialog().notification(
-            'Echo OnDemand', 'Settings backed up.', time=2500
-        )
-    except Exception as e:
-        log('Settings backup FAILED: {}'.format(e), xbmc.LOGERROR)
-        xbmcgui.Dialog().ok(
-            'Echo OnDemand',
-            'Could not write settings backup:\n{}'.format(e)
-        )
-
-
-def do_settings_restore():
-    """Read the backup snapshot and write each value back via ADDON.setSetting."""
-    path = _backup_path()
-    if not os.path.exists(path):
-        xbmcgui.Dialog().ok(
-            'Echo OnDemand',
-            'No backup found at:\n{}\n\nUse "Backup Settings" first.'.format(path)
-        )
-        return
-
-    try:
-        with open(path, 'r', encoding='utf-8') as f:
-            snapshot = json.load(f)
-    except Exception as e:
-        log('Settings restore: read failed: {}'.format(e), xbmc.LOGERROR)
-        xbmcgui.Dialog().ok(
-            'Echo OnDemand',
-            'Backup file unreadable:\n{}'.format(e)
-        )
-        return
-
-    # Version guard — if the snapshot was written by a future Echo OnDemand
-    # with an incompatible schema, refuse rather than silently corrupting.
-    snap_version = safe_int(snapshot.get('version', 0))
-    if snap_version > _BACKUP_VERSION:
-        xbmcgui.Dialog().ok(
-            'Echo OnDemand',
-            'Backup is from a newer addon version ({}) than this one ({}).\n'
-            'Refusing to restore.'.format(snap_version, _BACKUP_VERSION)
-        )
-        return
-
-    settings = snapshot.get('settings', {})
-    if not isinstance(settings, dict):
-        xbmcgui.Dialog().ok(
-            'Echo OnDemand', 'Backup file is malformed (settings field).'
-        )
-        return
-
-    # Confirm before overwriting current values — one click of the wrong menu
-    # entry shouldn't silently replace a working configuration.
-    confirmed = xbmcgui.Dialog().yesno(
-        'Echo OnDemand',
-        'Restore settings from backup?\n'
-        'Current Settings will be overwritten.',
-        nolabel='Cancel', yeslabel='Restore'
-    )
-    if not confirmed:
-        return
-
-    restored = 0
-    for key in _BACKUP_KEYS:
-        if key in settings:
-            try:
-                ADDON.setSetting(key, str(settings[key] or ''))
-                restored += 1
-            except Exception as e:
-                log('Settings restore: failed to set {}: {}'.format(key, e),
-                    xbmc.LOGWARNING)
-    log('Settings restore: {} keys applied from {}'.format(restored, path),
-        xbmc.LOGINFO)
-    xbmcgui.Dialog().notification(
-        'Echo OnDemand',
-        'Restored {} setting{}.'.format(restored, '' if restored == 1 else 's'),
-        time=2500
-    )
-
-
-# ---------------------------------------------------------------------------
 # Refresh
 # ---------------------------------------------------------------------------
 
 def do_refresh():
     cache_clear_all()
     xbmcgui.Dialog().notification('Echo OnDemand', 'Cache cleared.', time=2000)
-    list_root(update_listing=True)
+    list_root()
 
 
 # ---------------------------------------------------------------------------
@@ -2557,7 +1073,6 @@ def router(paramstring):
     params    = dict(parse_qsl(paramstring.lstrip('?')))
     mode      = params.get('mode')
     cat_id    = params.get('cat_id', '')
-    cat_name  = params.get('cat_name', '')
     series_id = params.get('series_id', '')
     season    = params.get('season', '')
     vod_id    = params.get('vod_id', '')
@@ -2565,22 +1080,11 @@ def router(paramstring):
     ext       = params.get('ext', 'mp4')
     vod_name  = params.get('vod_name', '')
     vod_year  = safe_int(params.get('vod_year', 0))
-    wr_url    = params.get('wr_url', '')
-    wr_title  = params.get('wr_title', 'Wrestling Rewind')
-    wr_item   = params.get('wr_item', '')
-    # Static menu params (WOD/FOD curated trees + Live sub-menus).
-    menu_key   = params.get('key', '')
-    menu_title = params.get('title', '')
-    # Pluto TV channel-by-ID playback.
-    channel_id = params.get('channel_id', '')
-    # Pluto category browsing — `group` is a Pluto channel-group name
-    # like 'Sports', 'News', 'Entertainment' (from mjh's catalog).
-    group_name = params.get('group', '')
 
     if mode == 'movie_cats':
         list_movie_categories()
     elif mode == 'movies':
-        list_movies(cat_id, cat_name)
+        list_movies(cat_id)
     elif mode == 'play_movie':
         play_movie(vod_id, ext, vod_name, vod_year)
     elif mode == 'play_episode':
@@ -2588,29 +1092,11 @@ def router(paramstring):
     elif mode == 'series_cats':
         list_series_categories()
     elif mode == 'series':
-        list_series(cat_id, cat_name)
+        list_series(cat_id)
     elif mode == 'seasons':
         list_seasons(series_id)
     elif mode == 'episodes':
         list_episodes(series_id, season)
-    elif mode == 'wr_list':
-        list_wr(wr_url, wr_title)
-    elif mode == 'wr_play':
-        play_wr(wr_item)
-    elif mode == 'static_menu':
-        list_static_menu(menu_key, menu_title)
-    elif mode == 'play_pluto':
-        play_pluto(channel_id, menu_title)
-    elif mode == 'list_stream':
-        list_stream()
-    elif mode == 'list_tools':
-        list_tools()
-    elif mode == 'pluto_chans':
-        list_pluto_channels(group_name)
-    elif mode == 'settings_backup':
-        do_settings_backup()
-    elif mode == 'settings_restore':
-        do_settings_restore()
     elif mode == 'refresh':
         do_refresh()
     else:
