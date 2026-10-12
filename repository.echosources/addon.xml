@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="repository.echosources" name="Echo Sources" version="1.1.0" provider-name="Echo-Storm">
+<addon id="repository.echosources" name="Echo Sources" version="1.2.0" provider-name="Echo-Storm">
 	<extension point="xbmc.addon.repository" name="Echo Sources">
 		<!-- EchoRepo: Echo Launcher, Kodi Weather, Echo On Demand, MP3 Streams Echoed, Pandoki, Silvo skin -->
 		<dir>
@@ -42,18 +42,6 @@
 			<info compressed="false">https://raw.githubusercontent.com/Gujal00/smrzips/master/addons.xml</info>
 			<checksum>https://raw.githubusercontent.com/Gujal00/smrzips/master/addons.xml.md5</checksum>
 			<datadir zip="true">https://raw.githubusercontent.com/Gujal00/smrzips/master/zips/</datadir>
-		</dir>
-		<!-- CocoScrapers: script.module.cocoscrapers (scrapers used by The Crew and others) -->
-		<dir minversion="19.0">
-			<info compressed="false">https://raw.githubusercontent.com/CocoJoe2411/repository.cocoscrapers/master/zips/addons.xml</info>
-			<checksum>https://raw.githubusercontent.com/CocoJoe2411/repository.cocoscrapers/master/zips/addons.xml.md5</checksum>
-			<datadir zip="true">https://raw.githubusercontent.com/CocoJoe2411/repository.cocoscrapers/master/zips/</datadir>
-		</dir>
-		<!-- The Crew: The Crew and its modules (only its own list, not the other repositories its repository add-on includes) -->
-		<dir minversion="18.9.9">
-			<info compressed="false">https://raw.githubusercontent.com/thecrewwh/zips/master/matrix/_zip/addons.xml</info>
-			<checksum>https://raw.githubusercontent.com/thecrewwh/zips/master/matrix/_zip/addons.xml.md5</checksum>
-			<datadir zip="true">https://raw.githubusercontent.com/thecrewwh/zips/master/matrix/_zip</datadir>
 		</dir>
 	</extension>
 	<extension point="xbmc.addon.metadata">
