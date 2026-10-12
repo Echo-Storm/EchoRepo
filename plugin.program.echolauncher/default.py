@@ -79,9 +79,11 @@ def show_group(group, manage):
 		if not addon:
 			add_item(f"{label} ({text(32010)})", link(action='missing'), False, menu=menu)
 			continue
-		icon, fanart = addon.getAddonInfo('icon'), addon.getAddonInfo('fanart')
+		# No fanart on purpose: Silvo shows the focused widget item's fanart as the home background, and the owner wants the menu item's
+		# (conditional weather) background to stay while a tile is highlighted.
+		icon = addon.getAddonInfo('icon')
 		add_item(label, entry.get('url') or f"plugin://{entry['id']}/", True,
-		         art={'thumb': icon, 'icon': icon, 'fanart': fanart}, plot=entry.get('desc', ''), menu=menu)
+		         art={'thumb': icon, 'icon': icon}, plot=entry.get('desc', ''), menu=menu)
 	if manage:
 		add_item(f'{text(32001)} ({len(entries)}/{limit()})', link(action='add', group=group), False, art={'icon': 'DefaultAddSource.png', 'thumb': 'DefaultAddSource.png'})
 	xbmcplugin.setContent(HANDLE, 'files')
