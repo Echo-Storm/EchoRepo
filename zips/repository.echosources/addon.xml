@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="repository.echosources" name="Echo Sources" version="1.0.0" provider-name="Echo-Storm">
+	<extension point="xbmc.addon.repository" name="Echo Sources">
+		<!-- EchoRepo: Echo Launcher, Kodi Weather, Echo On Demand, MP3 Streams Echoed, Pandoki, Silvo skin -->
+		<dir>
+			<info compressed="false">https://raw.githubusercontent.com/Echo-Storm/EchoRepo/main/zips/addons.xml</info>
+			<checksum>https://raw.githubusercontent.com/Echo-Storm/EchoRepo/main/zips/addons.xml.md5</checksum>
+			<datadir zip="true">https://raw.githubusercontent.com/Echo-Storm/EchoRepo/main/zips/</datadir>
+		</dir>
+		<!-- Chains: Gears, Chain Reaction and their scrapers -->
+		<dir>
+			<info compressed="false">https://raw.githubusercontent.com/unhingedthemes/zips/main/_zips/addons.xml</info>
+			<checksum>https://raw.githubusercontent.com/unhingedthemes/zips/main/_zips/addons.xml.md5</checksum>
+			<datadir zip="true">https://raw.githubusercontent.com/unhingedthemes/zips/main/_zips/</datadir>
+		</dir>
+		<!-- Otaku: Otaku -->
+		<dir>
+			<info compressed="false">https://raw.githubusercontent.com/Goldenfreddy0703/repository.otaku/master/repo/zips/addons.xml</info>
+			<checksum>https://raw.githubusercontent.com/Goldenfreddy0703/repository.otaku/master/repo/zips/addons.xml.md5</checksum>
+			<datadir zip="true">https://raw.githubusercontent.com/Goldenfreddy0703/repository.otaku/master/repo/zips/</datadir>
+		</dir>
+		<!-- Animaniac: WatchNixtoons2 -->
+		<dir>
+			<info compressed="false">https://github.com/OldManJax/repository.animaniac/raw/master/addons.xml</info>
+			<checksum>https://github.com/OldManJax/repository.animaniac/raw/master/addons.xml.md5</checksum>
+			<datadir zip="true">https://github.com/OldManJax/repository.animaniac/raw/master/</datadir>
+		</dir>
+		<!-- Magnetic: Mad Titan Sports, jetextractors, microjenscrapers -->
+		<dir>
+			<info compressed="false">https://magnetic.website/__zips/addons.xml</info>
+			<checksum>https://magnetic.website/__zips/addons.xml.md5</checksum>
+			<datadir zip="true">https://magnetic.website/__zips/</datadir>
+		</dir>
+		<!-- kodifitzwell: POV (the first address of that repository is an empty list; the second one has POV) -->
+		<dir minversion="19.0.0">
+			<info compressed="false">https://kodifitzwell.github.io/repo/packages/addons.xml</info>
+			<checksum>https://kodifitzwell.github.io/repo/packages/addons.xml.md5</checksum>
+			<datadir zip="true">https://kodifitzwell.github.io/repo/</datadir>
+		</dir>
+		<!-- ResolveURL: resolveurl -->
+		<dir>
+			<info compressed="false">https://raw.githubusercontent.com/Gujal00/smrzips/master/addons.xml</info>
+			<checksum>https://raw.githubusercontent.com/Gujal00/smrzips/master/addons.xml.md5</checksum>
+			<datadir zip="true">https://raw.githubusercontent.com/Gujal00/smrzips/master/zips/</datadir>
+		</dir>
+		<!-- The Crew: The Crew and its modules (only its own list, not the other repositories its repository add-on includes) -->
+		<dir minversion="18.9.9">
+			<info compressed="false">https://raw.githubusercontent.com/thecrewwh/zips/master/matrix/_zip/addons.xml</info>
+			<checksum>https://raw.githubusercontent.com/thecrewwh/zips/master/matrix/_zip/addons.xml.md5</checksum>
+			<datadir zip="true">https://raw.githubusercontent.com/thecrewwh/zips/master/matrix/_zip</datadir>
+		</dir>
+	</extension>
+	<extension point="xbmc.addon.metadata">
+		<summary lang="en_GB">The add-on sources Echo-Storm uses, in one place</summary>
+		<description lang="en_GB">Lists only the repositories that the add-ons on these devices come from, so they can install and update. It has no code. It does not include any repository that is not listed here.</description>
+		<platform>all</platform>
+		<license>MIT</license>
+		<assets>
+			<icon>icon.png</icon>
+			<fanart>fanart.jpg</fanart>
+		</assets>
+	</extension>
+</addon>
