@@ -8,7 +8,7 @@ import xbmcvfs
 ADDON = xbmcaddon.Addon()
 FOLDER = xbmcvfs.translatePath(ADDON.getAddonInfo('profile'))
 FILE = os.path.join(FOLDER, 'launchers.json')
-DEFAULT_GROUPS = ('Audio', 'Video', 'Stream')
+DEFAULT_GROUPS = ('Video', 'Stream')
 
 
 def _read(path):
@@ -28,8 +28,12 @@ def load():
 		except (OSError, ValueError):
 			continue
 		if data:
-			return data
-	return {name: [] for name in DEFAULT_GROUPS}
+			break
+	else:
+		data = {}
+	for name in DEFAULT_GROUPS:        # the standard shelves always exist, so an older file gets the new ones
+		data.setdefault(name, [])
+	return data
 
 
 def save(data):

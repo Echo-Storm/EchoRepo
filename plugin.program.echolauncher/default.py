@@ -16,6 +16,14 @@ HANDLE = int(sys.argv[1]) if len(sys.argv) > 1 else -1
 PARAMS = dict(parse_qsl(sys.argv[2].lstrip('?'))) if len(sys.argv) > 2 else {}
 
 
+def limit():
+	"""Most entries a shelf may hold (setting 'limit'; the add-on refuses more when adding, it never hides entries that are already there)."""
+	try:
+		return max(1, int(ADDON.getSetting('limit') or 5))
+	except ValueError:
+		return 5
+
+
 def text(number, *args):
 	return ADDON.getLocalizedString(number).format(*args)
 
@@ -75,7 +83,7 @@ def show_group(group, manage):
 		add_item(label, entry.get('url') or f"plugin://{entry['id']}/", True,
 		         art={'thumb': icon, 'icon': icon, 'fanart': fanart}, plot=entry.get('desc', ''), menu=menu)
 	if manage:
-		add_item(text(32001), link(action='add', group=group), False, art={'icon': 'DefaultAddSource.png', 'thumb': 'DefaultAddSource.png'})
+		add_item(f'{text(32001)} ({len(entries)}/{limit()})', link(action='add', group=group), False, art={'icon': 'DefaultAddSource.png', 'thumb': 'DefaultAddSource.png'})
 	xbmcplugin.setContent(HANDLE, 'files')
 	xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
 
@@ -90,6 +98,10 @@ def installed_plugins():
 def add(group):
 	data = store.load()
 	have = {entry['id'] for entry in data.get(group, [])}
+	room = limit() - len(data.get(group, []))
+	if room <= 0:
+		xbmcgui.Dialog().ok(ADDON.getAddonInfo('name'), text(32012, group, limit()))
+		return
 	choices = [a for a in installed_plugins() if a['addonid'] not in have]
 	if not choices:
 		xbmcgui.Dialog().notification(ADDON.getAddonInfo('name'), text(32006, group), xbmcgui.NOTIFICATION_INFO)
@@ -99,9 +111,13 @@ def add(group):
 		li = xbmcgui.ListItem(a['name'], a.get('summary', ''), offscreen=True)
 		li.setArt({'icon': a.get('thumbnail', '')})
 		rows.append(li)
-	picked = xbmcgui.Dialog().multiselect(text(32002, group), rows, useDetails=True)
-	if not picked:
-		return
+	while True:
+		picked = xbmcgui.Dialog().multiselect(text(32002, group) + f' ({room})', rows, useDetails=True)
+		if not picked:
+			return
+		if len(picked) <= room:
+			break
+		xbmcgui.Dialog().ok(ADDON.getAddonInfo('name'), text(32013, room, group))
 	for i in picked:
 		data.setdefault(group, []).append({'id': choices[i]['addonid'], 'label': choices[i]['name'], 'desc': choices[i].get('summary', '')})
 	store.save(data)

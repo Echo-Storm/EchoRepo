@@ -47,3 +47,15 @@ msgstr ""
 msgctxt "#32011"
 msgid "This add-on is not installed on this device. Use the context menu to remove it from the list."
 msgstr ""
+
+msgctxt "#32012"
+msgid "{0} already holds {1} add-ons. Remove one first, or raise the limit in the add-on settings."
+msgstr ""
+
+msgctxt "#32013"
+msgid "{1} has room for {0} more. Pick fewer add-ons."
+msgstr ""
+
+msgctxt "#32014"
+msgid "Add-ons per shelf"
+msgstr ""
