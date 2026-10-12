@@ -1,5 +1,3 @@
-import os
-
 from . import weather
 from . import config
 from . import utils

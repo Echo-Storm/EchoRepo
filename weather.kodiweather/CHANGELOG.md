@@ -2,6 +2,25 @@
 
 All notable changes to weather.kodiweather.
 
+## [2.5.0] - 2026-10-12
+
+Kodi 22 (Python 3.14) and Aeon Nox Silvo 11. Everything below was checked with an offline harness that dumps every window property before and after each change.
+
+### Added
+- **The add-on's own weather screen** (`screen.py`, `resources/skins/default/1080i/script-kodiweather-main.xml`): Overview, Daily, 36 Hour, Weekend, Hourly and a fitted-square Radar page, plus a location switch and the settings. It reads the properties this add-on publishes on the Weather window, so a skin update can no longer replace it with the skin's stock window. Open it with `RunScript(weather.kodiweather)` (the Weather item of the home menu). It borrows only fonts, colours and the theme colour variables from Aeon Nox Silvo and still draws if some are missing. The old custom `MyWeather.xml` skin file is gone.
+- **`36Hour.*`, `Weekend.*`, `Updated`** window properties (`lib/periods.py`). 36 Hour is three 12-hour blocks (day 06:00-18:00, night 18:00-06:00) starting with the block that contains now, named Overnight / Today / This Afternoon / Tonight / Tomorrow; day blocks report the high, night blocks the low. Weekend is the next Saturday and Sunday.
+- **`Hourly.N.TemperatureGraph`** (whole number): Silvo 11's hourly page reads it and it was blank before.
+- **`Daily.N.Precipitation`, `Daily.N.WindSpeed`, `Daily.N.WindDirection`** (the forecast request now also asks open-meteo for the daily maximum wind speed and dominant wind direction) and **`Hourly.N.HeatIndex`, `Hourly.N.WindChill`** (NWS formulas; empty when they do not apply).
+
+### Changed
+- **Radar**: only the newest scan is downloaded once recent frames exist (9 tiles instead of 108 per refresh), refreshed every 10 minutes instead of hourly, at most 8 frames kept (the map history setting is now 2 to 8, default 8), a smaller timestamp at the bottom left. Changing the map zoom clears the stored frames.
+- **About 75% fewer window properties** (11,642 to 2,604): the hourly graph properties (21 fields x 24 measurements x 24 hours, which no shipped skin reads) are now opt-in through the hidden setting `enablegraphs`; hourly detail is 24 hours ahead and none past (Silvo 11 reads hours 1 to 17).
+- **Smaller download**: the add-on zip is built from an explicit list (`tools/package.py`), about 1.9 MB; icon resized to 256 px and fanart recompressed.
+- Code: `utils.getprop` split into `graphs.py` and `timeofday.py`; `config.py` split into `maps.py` and `fanart.py`; the alert threshold table is generated from a compact list; the 22 bare `except:` clauses now name the exceptions they expect; `settingrpc` no longer raises on an error reply.
+
+### Removed
+- 310 window properties (`*OutlookIconWMO`, `*FanartCodeWMO`) that pointed to an icon folder that is not shipped, the hidden icon-set setting, unused imports and helpers, duplicate images, the GPL `LICENSE.txt` (the add-on is MIT).
+
 ## [2.4.13] - 2026-05-19
 
 ### Fixed — Heavy rain/drizzle showing snow/sleet icon

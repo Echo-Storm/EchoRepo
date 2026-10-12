@@ -1,5 +1,3 @@
-import os
-import sys
 import xbmc
 import xbmcgui
 import xbmcaddon
@@ -11,7 +9,6 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 from pytz import timezone
 from pathlib import Path
-from statistics import mode, mean, StatisticsError
 
 from . import config
 from . import conv
@@ -43,7 +40,7 @@ def setting(arg, type='str', cache=False):
 	if cache:
 		try:
 			value = config.addon.settings[arg]
-		except:
+		except (KeyError, AttributeError):
 			value = xbmcaddon.Addon().getSetting(arg)
 	else:
 		value = xbmcaddon.Addon().getSetting(arg)
@@ -77,10 +74,11 @@ def setsetting(arg, value):
 def settingrpc(setting):
 	try:
 		r = json.loads(xbmc.executeJSONRPC('{{"jsonrpc":"2.0","id":1,"method":"Settings.GetSettingValue", "params": {{"setting": "{}"}} }}'.format(setting)))
-	except:
+	except (ValueError, TypeError):
 		return None
 	else:
-		return r.get('result').get('value')
+		# an error reply has no 'result': give None instead of raising AttributeError
+		return (r.get('result') or {}).get('value')
 
 def settings(changed=False):
 	dict = {}
@@ -92,7 +90,7 @@ def settings(changed=False):
 			data = f.read()
 
 		root = ET.fromstring(data)
-	except:
+	except (OSError, ET.ParseError, UnicodeDecodeError):
 		return dict
 	else:
 		for item in root:
@@ -180,15 +178,13 @@ def lastupdate(arg):
 		time1 = setting(arg)
 		time2 = dt('nowutcstamp')
 		return int(time2) - int(time1)
-	except:
+	except (ValueError, TypeError):
 		return 321318000
 
 def setupdate(arg):
 	setsetting(arg, dt('nowutcstamp'))
 
 # Window property
-def clrprop(property):
-	xbmcgui.Window(12600).clearProperty(property)
 
 def winprop(property):
 	return xbmcgui.Window(12600).getProperty(property)
@@ -245,7 +241,7 @@ def getprop(data, map, idx, count):
 					isday = 'd'
 				else:
 					isday = 'n'
-			except:
+			except (KeyError, IndexError, TypeError):
 				isday = 'd'
 		else:
 			try:
@@ -253,7 +249,7 @@ def getprop(data, map, idx, count):
 					isday = 'd'
 				else:
 					isday = 'n'
-			except:
+			except (KeyError, IndexError, TypeError):
 				isday = 'd'
 
 	# Tools
@@ -265,10 +261,6 @@ def getprop(data, map, idx, count):
 		content = round(content, 2)
 	elif unit == 'wmocond':
 		content = config.localization.wmo.get(f'{content}{isday}')
-	elif unit == 'wmoimage':
-		content = f'{config.addon_icons}/{config.addon.icons}/{content}{isday}.png'
-	elif unit == 'wmocode':
-		content = f'{content}{isday}'
 	elif unit == 'image':
 		# KODI workaround for DayX.OutlookIcon, add "resource://resource.images.weathericons.default" to path
 		if map[2][0] == 'day':
@@ -322,6 +314,8 @@ def getprop(data, map, idx, count):
 		content = conv.speed(content)
 	elif unit == 'unitspeed':
 		content = conv.speed()
+	elif unit == 'speedunit':
+		content = f'{conv.speed(content)} {conv.speed()}'
 
 	# Precipitation
 	elif unit == 'precipitation':
@@ -395,389 +389,15 @@ def getprop(data, map, idx, count):
 	elif unit == 'season':
 		content = conv.season(float(content))
 
-	# Graphs
+	# Graphs (graphs.py)
 	elif unit == 'graph':
-		idxnow    = index("now", data)
-		type      = map[2][1]
-		unit      = map[4]
-		scaleneg  = False
-		count     = 1
-		property  = f'{map[2][0]}.{count}.{map[2][1]}'
-		content   = None
-		alerting  = setting(f'alert_{type.split(".")[0]}_enabled', 'bool', True)
+		from . import graphs
+		return graphs.build(data, map)
 
-		# Guard: index not found (weather data not yet loaded)
-		if idxnow is None:
-			return content
-
-		# Data
-		lv = []
-		lt = []
-
-		for idx in range(idxnow, idxnow+24):
-			try:
-				v = data[map[1][0]][map[1][1]][idx]
-				t = data[map[1][0]]['time'][idx]
-			except:
-				continue
-			else:
-				lv.append(v)
-				lt.append(t)
-
-		# Unit
-		lc   = [ conv.item(v, unit, False) for v in lv ]
-		unit = conv.item(False, unit)
-
-		addprop(f'{property}.unit', unit)
-
-		# Guard: no usable data for this graph
-		if not lc:
-			return content
-
-		# Neg
-		scaleneg = bool([ v for v in lc if v < 0 ])
-
-		# Scale
-		scalemin = min(lc)
-		scalemax = max(lc)
-		scaleabs = max([ abs(v) for v in lc ])
-
-		r = 1 if scalemin < 1 and scalemax < 1 else None
-		a = scalemax/4
-		s = (scalemax-scalemin)/4
-
-		addprop(f'{property}.xaxis0', round(scalemax,r))
-		addprop(f'{property}.xaxis1', round(scalemax-a,r))
-		addprop(f'{property}.xaxis2', round(scalemax-a*2,r))
-		addprop(f'{property}.xaxis3', round(scalemax-a*3,r))
-		addprop(f'{property}.xaxis4', round(scalemax-a*4,r))
-
-		addprop(f'{property}.scalexaxis0', round(scalemax,r))
-		addprop(f'{property}.scalexaxis1', round(scalemax-s,r))
-		addprop(f'{property}.scalexaxis2', round(scalemax-s*2,r))
-		addprop(f'{property}.scalexaxis3', round(scalemax-s*3,r))
-		addprop(f'{property}.scalexaxis4', round(scalemax-s*4,r))
-
-		# Graph
-		for idx in range(0,24):
-			alert     = 0
-			property  = f'{map[2][0]}.{count}.{map[2][1]}'
-
-			try:
-				time   = lt[idx]
-				avalue = lv[idx]
-				value  = lc[idx]
-
-			except:
-				continue
-			else:
-				negative = True if value < 0 else False
-
-				if scalemax-scalemin == 0 or scaleabs == 0:
-					percent = 0
-				else:
-					percent = round((value-scalemin)/(scalemax-scalemin)*100) if not negative else round(abs(value)/scaleabs*100)
-
-				if scalemax == 0 or scaleabs == 0:
-					percentabs = 0
-				else:
-					percentabs = round((value)/(scalemax)*100) if not negative else round(abs(value)/scaleabs*100)
-
-				# Time
-				addprop(f'{property}.time', conv.time('hour', time))
-
-				# Value
-				addprop(f'{property}.value', value)
-
-				# Image
-				if scaleneg:
-					if negative:
-						addprop(f'{property}.image', f'{config.addon_icons}/graph/{config.kodi.height}/bar_n{percent}n.png')
-						addprop(f'{property}.code', f'n{percent}n')
-					else:
-						addprop(f'{property}.image', f'{config.addon_icons}/graph/{config.kodi.height}/bar_n{percent}p.png')
-						addprop(f'{property}.code', f'n{percent}p')
-
-				else:
-					addprop(f'{property}.image', f'{config.addon_icons}/graph/{config.kodi.height}/bar_{percentabs}p.png')
-					addprop(f'{property}.code', f'{percentabs}p')
-					addprop(f'{property}.scaleimage', f'{config.addon_icons}/graph/{config.kodi.height}/bar_{percent}p.png')
-					addprop(f'{property}.scalecode', f'{percent}p')
-
-				# Alert
-				if alerting:
-
-					for c, d in [(x, y) for x in [ 3, 2, 1 ] for y in [ 'high', 'low', 'wmo' ] ]:
-						last =  False
-
-						try:
-							if d == 'wmo':
-								limit = list(config.alert.map[type][f'alert_{type.split(".")[0]}_{d}_{c}'].split(' '))
-							else:
-								limit = int(config.alert.map[type][f'alert_{type.split(".")[0]}_{d}_{c}'])
-						except:
-							continue
-
-						if d == 'high':
-							if avalue >= limit:
-								if last and avalue > last:
-									alert, last = c, avalue
-								elif not last:
-									alert, last = c, avalue
-						elif d == 'low':
-							if avalue <= limit:
-								if last and avalue < last:
-									alert, last = c, avalue
-								elif not last:
-									alert, last = c, avalue
-						elif d == 'wmo':
-							for wmo in limit:
-								if avalue == int(wmo):
-									if last and avalue > last:
-										alert, last = c, avalue
-									elif not last:
-										alert, last = c, avalue
-						if alert:
-							break
-
-				addprop(f'{property}.alert', alert)
-
-				# Alert icon
-				if alert == 0:
-					addprop(f'{property}.alerticon', '')
-				else:
-					if type == 'condition.graph':
-						icon  = f'{config.map_alert_condition.get(last)}{alert}'
-						addprop(f'{property}.alerticon', f'{config.addon_icons}/alert/{icon}.png')
-					else:
-						addprop(f'{property}.alerticon', f'{config.addon_icons}/alert/{config.alert.map[type]["icon"]}{alert}.png')
-
-				# Color
-				if alert == 0:
-					if negative:
-						addprop(f'{property}.color', config.addon.cnegative)
-						addprop(f'{property}.colornormal', config.addon.cnegative)
-					else:
-						addprop(f'{property}.color', config.addon.cdefault)
-						addprop(f'{property}.colornormal', config.addon.cnormal)
-
-				elif alert == 1:
-					addprop(f'{property}.color', config.addon.cnotice)
-					addprop(f'{property}.colornormal', config.addon.cnotice)
-
-				elif alert == 2:
-					addprop(f'{property}.color', config.addon.ccaution)
-					addprop(f'{property}.colornormal', config.addon.ccaution)
-
-				elif alert == 3:
-					addprop(f'{property}.color', config.addon.cdanger)
-					addprop(f'{property}.colornormal', config.addon.cdanger)
-
-				count += 1
-
-	# TimeOfDay
+	# TimeOfDay (timeofday.py)
 	elif unit == 'timeofday':
-		idxnow  = index("now", data)
-		idxmid  = index("mid", data)
-		idxday  = index("mid", data)
-		tod     = { 0: 'night', 1: 'morning', 2: 'afternoon', 3: 'evening' }
-		start   = False
-		content = 'true'
-		idxtod  = 1
-		idxtod2 = 1
-		idxtod3 = 1
-
-		for d in range(0, config.maxdays):
-			l   = []
-			ll  = []
-
-			# Daily
-			for c in range(idxday, idxday+24):
-
-				try:
-					v  = data[map[1][0]][map[1][1]][c]
-					vv = data[map[1][0]]['temperature_2m'][c]
-				except:
-					for i in [ 'date', 'shortdate', 'weekday', 'weekdayshort', 'condition', 'outlook', 'outlookicon', 'outlookiconwmo', 'temperature', 'maxoutlook', 'maxoutlookicon', 'maxoutlookiconwmo' ]:
-						addprop(f'daily.{idxtod3}.overview.{i}', '')
-					continue
-				else:
-					l.append(v)
-					ll.append(vv)
-
-			# Personalized forecast
-			fcstart = config.map_fcstart.get(config.addon.fcstart)
-			fcend   = config.map_fcend.get(config.addon.fcend)
-
-			l_full = list(l)  # full 24h window; used for worst-case daily card condition
-			l = l[fcstart:][:fcend]
-
-			# Skip day if no hourly data available (days beyond 72-hour window)
-			if not l or not ll:
-				for i in [ 'date', 'shortdate', 'weekday', 'weekdayshort', 'condition', 'outlook', 'outlookicon', 'outlookiconwmo', 'temperature', 'maxoutlook', 'maxoutlookicon', 'maxoutlookiconwmo', 'fanartcode', 'fanartcodewmo' ]:
-					addprop(f'daily.{idxtod3}.overview.{i}', '')
-					addprop(f'daily.{idxtod3}.{i}', '')
-					addprop(f'day{idxtod3-1}.{i}', '')
-				idxday += 24
-				idxtod3 += 1
-				continue
-
-			# Properties
-			date  = data[map[1][0]]['time'][idxday]
-			try:
-				code = mode(sorted(l, reverse=True))
-			except StatisticsError:
-				code = max(l)  # Fallback to most severe condition
-			mcode      = max(l)
-			mcode_full = max(l_full)  # worst condition of the full 24h day
-			temp  = conv.temp(mean(ll))
-
-			addprop(f'daily.{idxtod3}.overview.date', dt('stamploc', date).strftime(config.kodi.date))
-			addprop(f'daily.{idxtod3}.overview.shortdate', dt('stamploc', date).strftime(config.kodi.date))
-			addprop(f'daily.{idxtod3}.overview.weekday', config.localization.weekday.get(dt('stamploc', date).strftime('%u')))
-			addprop(f'daily.{idxtod3}.overview.weekdayshort', config.localization.weekdayshort.get(dt('stamploc', date).strftime('%u')))
-			addprop(f'daily.{idxtod3}.overview.temperature', temp)
-			addprop(f'daily.{idxtod3}.overview.outlook', config.localization.wmo.get(f'{code}d'))
-			addprop(f'daily.{idxtod3}.overview.outlookicon', f'{config.safe_fanart_code(code, "d") or config.map_wmo.get(f"{code}d")}.png')
-			addprop(f'daily.{idxtod3}.overview.outlookiconwmo', f'{config.addon_icons}/{config.addon.icons}/{code}d.png')
-			addprop(f'daily.{idxtod3}.overview.fanartcode', config.safe_fanart_code(code, 'd') or '')
-			addprop(f'daily.{idxtod3}.overview.fanartcodewmo', f'{code}d')
-
-			# Overwrite forecast (personalized)
-			addprop(f'daily.{idxtod3}.condition', config.localization.wmo.get(f'{code}d'))
-			addprop(f'daily.{idxtod3}.outlook', config.localization.wmo.get(f'{code}d'))
-			addprop(f'daily.{idxtod3}.outlookicon', f'{config.safe_fanart_code(code, "d") or config.map_wmo.get(f"{code}d")}.png')
-			addprop(f'daily.{idxtod3}.outlookiconwmo', f'{config.addon_icons}/{config.addon.icons}/{code}d.png')
-			addprop(f'daily.{idxtod3}.fanartcode', config.safe_fanart_code(code, 'd') or '')
-			addprop(f'daily.{idxtod3}.fanartcodewmo', f'{code}d')
-
-			addprop(f'day{idxtod3-1}.condition', config.localization.wmo.get(f'{mcode_full}d'))
-			addprop(f'day{idxtod3-1}.outlook', config.localization.wmo.get(f'{mcode_full}d'))
-			addprop(f'day{idxtod3-1}.outlookicon', f'resource://resource.images.weathericons.default/{config.safe_fanart_code(mcode_full, "d") or config.map_wmo.get(f"{mcode_full}d")}.png')
-			addprop(f'day{idxtod3-1}.outlookiconwmo', f'{config.addon_icons}/{config.addon.icons}/{mcode_full}d.png')
-			addprop(f'day{idxtod3-1}.fanartcode', config.safe_fanart_code(mcode_full, 'd') or '')
-			addprop(f'day{idxtod3-1}.fanartcodewmo', f'{mcode_full}d')
-
-			# Max outlook — full-day worst vs personalized-window typical
-			if mcode_full > code:
-				addprop(f'daily.{idxtod3}.overview.maxoutlook', config.localization.wmo.get(f'{mcode_full}d'))
-				addprop(f'daily.{idxtod3}.overview.maxoutlookicon', f'{config.safe_fanart_code(mcode_full, "d") or config.map_wmo.get(f"{mcode_full}d")}.png')
-				addprop(f'daily.{idxtod3}.overview.maxoutlookiconwmo', f'{config.addon_icons}/{config.addon.icons}/{mcode_full}d.png')
-
-				addprop(f'daily.{idxtod3}.maxoutlook', config.localization.wmo.get(f'{mcode_full}d'))
-				addprop(f'daily.{idxtod3}.maxoutlookicon', f'{config.safe_fanart_code(mcode_full, "d") or config.map_wmo.get(f"{mcode_full}d")}.png')
-				addprop(f'daily.{idxtod3}.maxoutlookiconwmo', f'{config.addon_icons}/{config.addon.icons}/{mcode_full}d.png')
-
-			else:
-				addprop(f'daily.{idxtod3}.overview.maxoutlook', '')
-				addprop(f'daily.{idxtod3}.overview.maxoutlookicon', '')
-				addprop(f'daily.{idxtod3}.overview.maxoutlookiconwmo', '')
-
-				addprop(f'daily.{idxtod3}.maxoutlook', '')
-				addprop(f'daily.{idxtod3}.maxoutlookicon', '')
-				addprop(f'daily.{idxtod3}.maxoutlookiconwmo', '')
-
-			idxday += 24
-			idxtod3 += 1
-
-			# Hourly
-			for t in range(0,4):
-				l   = []
-				ll  = []
-				lll = []
-				llll = []
-				now = ''
-
-				for c in range(idxmid, idxmid+6):
-
-					try:
-						v   = data[map[1][0]][map[1][1]][c]
-						vv  = data[map[1][0]]['is_day'][c]
-						vvv = data[map[1][0]]['temperature_2m'][c]
-						vvvv = data[map[1][0]]['time'][c]
-					except:
-						continue
-					else:
-						l.append(v)
-						ll.append(vv)
-						lll.append(vvv)
-						llll.append(vvvv)
-
-						if idxnow == c:
-							start = True
-							now   = 'true'
-
-				# Skip this time slot if no data available (beyond 72-hour window)
-				if not l or not ll or not lll:
-					idxmid += 6
-					continue
-
-				date  = data[map[1][0]]['time'][idxmid]
-				try:
-					code = mode(sorted(l, reverse=True))
-				except StatisticsError:
-					code = max(l)  # Fallback to most severe condition
-				mcode = max(l)
-				try:
-					isday = mode(sorted(ll, reverse=False))
-				except StatisticsError:
-					isday = ll[0] if ll else 1  # Fallback to first value or daytime
-				isday = 'n' if isday == 0 else 'd'
-				temp  = conv.temp(mean(lll))
-
-				# TimeOfDay (List)
-				if start:
-					addprop(f'timeofday.{idxtod}.date', dt('stamploc', date).strftime(config.kodi.date))
-					addprop(f'timeofday.{idxtod}.shortdate', dt('stamploc', date).strftime(config.kodi.date))
-					addprop(f'timeofday.{idxtod}.weekday', config.localization.weekday.get(dt('stamploc', date).strftime('%u')))
-					addprop(f'timeofday.{idxtod}.weekdayshort', config.localization.weekdayshort.get(dt('stamploc', date).strftime('%u')))
-					addprop(f'timeofday.{idxtod}.time', config.localization.timeofday.get(t))
-					addprop(f'timeofday.{idxtod}.outlook', config.localization.wmo.get(f'{code}{isday}'))
-					addprop(f'timeofday.{idxtod}.outlookicon', f'{config.safe_fanart_code(code, isday) or config.map_wmo.get(f"{code}{isday}")}.png')
-					addprop(f'timeofday.{idxtod}.outlookiconwmo', f'{config.addon_icons}/{config.addon.icons}/{code}{isday}.png')
-					addprop(f'timeofday.{idxtod}.fanartcode', config.safe_fanart_code(code, isday) or '')
-					addprop(f'timeofday.{idxtod}.fanartcodewmo', f'{code}{isday}')
-					addprop(f'timeofday.{idxtod}.temperature', temp)
-
-					if mcode > code:
-						addprop(f'timeofday.{idxtod}.maxoutlook', config.localization.wmo.get(f'{mcode}{isday}'))
-						addprop(f'timeofday.{idxtod}.maxoutlookicon', f'{config.safe_fanart_code(mcode, isday) or config.map_wmo.get(f"{mcode}{isday}")}.png')
-						addprop(f'timeofday.{idxtod}.maxoutlookiconwmo', f'{config.addon_icons}/{config.addon.icons}/{mcode}{isday}.png')
-					else:
-						addprop(f'timeofday.{idxtod}.maxoutlook', '')
-						addprop(f'timeofday.{idxtod}.maxoutlookicon', '')
-						addprop(f'timeofday.{idxtod}.maxoutlookiconwmo', '')
-
-					idxtod += 1
-
-				# TimeOfDay (Daily)
-				addprop(f'daily.{idxtod2}.{tod.get(t)}.date', dt('stamploc', date).strftime(config.kodi.date))
-				addprop(f'daily.{idxtod2}.{tod.get(t)}.shortdate', dt('stamploc', date).strftime(config.kodi.date))
-				addprop(f'daily.{idxtod2}.{tod.get(t)}.weekday', config.localization.weekday.get(dt('stamploc', date).strftime('%u')))
-				addprop(f'daily.{idxtod2}.{tod.get(t)}.weekdayshort', config.localization.weekdayshort.get(dt('stamploc', date).strftime('%u')))
-				addprop(f'daily.{idxtod2}.{tod.get(t)}.time', config.localization.timeofday.get(t))
-				addprop(f'daily.{idxtod2}.{tod.get(t)}.outlook', config.localization.wmo.get(f'{code}{isday}'))
-				addprop(f'daily.{idxtod2}.{tod.get(t)}.outlookicon', f'{config.safe_fanart_code(code, isday) or config.map_wmo.get(f"{code}{isday}")}.png')
-				addprop(f'daily.{idxtod2}.{tod.get(t)}.outlookiconwmo', f'{config.addon_icons}/{config.addon.icons}/{code}{isday}.png')
-				addprop(f'daily.{idxtod2}.{tod.get(t)}.fanartcode', config.safe_fanart_code(code, isday) or '')
-				addprop(f'daily.{idxtod2}.{tod.get(t)}.fanartcodewmo', f'{code}{isday}')
-				addprop(f'daily.{idxtod2}.{tod.get(t)}.temperature', temp)
-
-				if mcode > code:
-					addprop(f'daily.{idxtod2}.{tod.get(t)}.maxoutlook', config.localization.wmo.get(f'{mcode}{isday}'))
-					addprop(f'daily.{idxtod2}.{tod.get(t)}.maxoutlookicon', f'{config.safe_fanart_code(mcode, isday) or config.map_wmo.get(f"{mcode}{isday}")}.png')
-					addprop(f'daily.{idxtod2}.{tod.get(t)}.maxoutlookiconwmo', f'{config.addon_icons}/{config.addon.icons}/{mcode}{isday}.png')
-				else:
-					addprop(f'daily.{idxtod2}.{tod.get(t)}.maxoutlook', '')
-					addprop(f'daily.{idxtod2}.{tod.get(t)}.maxoutlookicon', '')
-					addprop(f'daily.{idxtod2}.{tod.get(t)}.maxoutlookiconwmo', '')
-
-				if d == 0:
-					addprop(f'daily.{idxtod2}.{tod.get(t)}.now', now)
-
-				idxmid  += 6
-
-			idxtod2 += 1
+		from . import timeofday
+		return timeofday.build(data, map)
 
 	# Return data
 	return content
@@ -812,7 +432,7 @@ def index(arg, data):
 				timecheck = dt('stamploc', data['daily']['time'][idx]).strftime('%Y-%m-%d')
 			else:
 				timecheck = dt('stamploc', data['hourly']['time'][idx]).strftime('%Y-%m-%d %H')
-		except:
+		except (KeyError, IndexError, TypeError, ValueError):
 			return None
 		else:
 			if timecheck == match:

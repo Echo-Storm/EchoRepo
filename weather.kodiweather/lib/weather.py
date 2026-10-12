@@ -1,13 +1,12 @@
 import os
-import xbmc
 
 from pathlib import Path
-from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 
 from . import config
 from . import utils
 from . import conv
+from . import periods
 
 class Main():
 
@@ -58,7 +57,7 @@ class Main():
 					utils.setupdate(f'loc{locid}map')
 
 			# Rv - also re-download if cache folder missing
-			if utils.lastupdate(f'loc{locid}rv') >= 3600 or not Path(f'{config.addon_cache}/{locid}/iemradar').exists():
+			if utils.lastupdate(f'loc{locid}rv') >= config.radarrefresh or not Path(f'{config.addon_cache}/{locid}/iemradar').exists():
 				self.getmap('iemradar')
 
 				if api.network():
@@ -177,12 +176,18 @@ class Main():
 				self.setmap(type, map)
 
 			# Graph
+			# (the graph image/axis properties are 70% of all properties and no shipped skin reads them: opt-in)
 			elif map[0] == 'graph':
-				self.setmap(type, map)
+				if config.addon.enablegraphs:
+					self.setmap(type, map)
 
 			# Alert
 			if map[3] == 'graph':
 				self.setalert(type, [ map, indexnow ])
+
+		# Kodi weather window blocks: 36Hour, Weekend, Updated
+		if type == 'weather':
+			periods.setperiods(self.data[type], f'{config.addon_cache}/{config.loc.id}/{type}.json')
 
 	### SET CURRENT
 	def setcurrent(self, type, locid):
@@ -266,7 +271,7 @@ class Main():
 			try:
 				v  = int(data[map[0][1][0]][map[0][1][1]][index])
 				vv = int(data[map[0][1][0]]['time'][index])
-			except:
+			except (KeyError, IndexError, TypeError, ValueError):
 				if not self.mode == 'msgqueue':
 					utils.addprop(f'alert.{prop}', 0)
 					for winprop in winprops:
@@ -285,7 +290,7 @@ class Main():
 					limit = list(config.alert.map[type][alert].split(' '))
 				else:
 					limit = int(config.alert.map[type][alert])
-			except:
+			except (KeyError, ValueError, TypeError, AttributeError):
 				continue
 
 			for idx, v in enumerate(l):
@@ -405,7 +410,7 @@ class Main():
 		try:
 			available = len(data[time][map[0][1][1]])
 			end = idx + max if idx + max <= available else available
-		except:
+		except (KeyError, TypeError):
 			end = idx + max
 
 		for index in range(idx, end, 1):
@@ -467,26 +472,37 @@ class Main():
 		tiles = [ [ x-1, y-1, 0, 0 ], [ x, y-1, 256, 0 ], [ x+1, y-1, 512, 0 ], [ x-1, y, 0, 256 ], [ x, y, 256, 256 ], [ x+1, y, 512, 256 ], [ x-1, y+1, 0, 512 ], [ x, y+1, 256, 512 ], [ x+1, y+1, 512, 512 ] ]
 		dir   = f'{config.addon_cache}/{config.loc.id}'
 
-		# IEM NEXRAD layers - download all frames
+		# IEM NEXRAD layers
+		# IEM publishes a new scan every 5 minutes and its "-mNNm" layers are relative to now, so the frames already on disk are still
+		# valid under their own timestamps: when they are recent only the newest scan is downloaded (9 tiles instead of 9 x 8), which makes
+		# a short refresh interval cheap. A full download happens only for the first run or after a long gap.
 		if type == 'iemradar':
-			frames = api.getiemframes()
+			subdir = Path(f'{dir}/{type}')
+			subdir.mkdir(parents=True, exist_ok=True)
+
+			now      = utils.dt('nowutcstamp')
+			keep     = max(1, min(config.addon.maphistory, config.radarframes))
+			existing = sorted(subdir.glob('*.png'))
+
+			try:
+				newest = int(existing[-1].stem) if existing else 0
+			except ValueError:
+				newest = 0
+
+			if len(existing) >= 2 and 0 < now - newest < config.radargap:
+				frames = [ { 'offset': 0, 'layer': 'nexrad-n0q' } ]
+			else:
+				frames = api.getiemframes()[:keep]
+
+				# Offsets are relative to "now", so a full download replaces every frame
+				for f in existing:
+					f.unlink()
 
 			if not frames:
 				utils.log(f'[LOC{config.loc.id}] IEM frames not available ...', 3)
 				return
 
-			# Ensure subfolder exists
-			subdir = Path(f'{dir}/{type}')
-			subdir.mkdir(parents=True, exist_ok=True)
-
-			# Clear existing frames (IEM offsets are relative to "now", so all need refresh)
-			for f in subdir.glob('*.png'):
-				f.unlink()
-
-			utils.log(f'[LOC{config.loc.id}] {type}: downloading {len(frames)} frames', 3)
-
-			# Current time for synthetic timestamps (for file naming/sorting)
-			now = utils.dt('nowutcstamp')
+			utils.log(f'[LOC{config.loc.id}] {type}: downloading {len(frames)} frame(s)', 3)
 
 			for frame in frames:
 				if utils.monitor.abortRequested():
@@ -513,19 +529,13 @@ class Main():
 				api.mapmerge(map)
 				config.mapcache[type] = {}
 
-			# Cleanup old frames beyond history limit (in subfolder)
-			files   = sorted(list(subdir.glob('*.png')), reverse=True)
-			history = config.addon.maphistory
+			# Cleanup old frames beyond the history limit (newest first)
+			files = sorted(list(subdir.glob('*.png')), reverse=True)
 
-			for idx in range(0,100):
-				try:
-					file = files[idx]
-				except:
-					break
-				else:
-					if idx >= history:
-						utils.log(f'[LOC{config.loc.id}] Removing old map: {file.stem}', 3)
-						os.remove(file)
+			for idx, file in enumerate(files):
+				if idx >= keep:
+					utils.log(f'[LOC{config.loc.id}] Removing old map: {file.stem}', 3)
+					os.remove(file)
 
 		# OSM base layer - single download
 		else:
@@ -566,7 +576,7 @@ class Main():
 			dir     = f'{config.addon_cache}/{config.loc.id}'
 			subdir  = f'{dir}/{layer}'
 			files   = sorted([f for f in Path(subdir).glob('*.png') if f.stem.isdigit()], reverse=True) if Path(subdir).exists() else []
-			history = config.addon.maphistory
+			history = max(1, min(config.addon.maphistory, config.radarframes))
 			osm_exists = Path(f'{dir}/osm.png').exists()
 
 			# Area (OSM base map exists independently from radar frames)
@@ -600,7 +610,7 @@ class Main():
 
 				try:
 					file = files[idx]
-				except:
+				except IndexError:
 					utils.addprop(f'Map.{index}.Layer.{idx}', '')
 					utils.addprop(f'Map.{index}.Time.{idx}', '')
 				else:

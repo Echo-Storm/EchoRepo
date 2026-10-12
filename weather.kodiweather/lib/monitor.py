@@ -31,6 +31,13 @@ class Main(xbmc.Monitor):
 							utils.setsetting(f'loc{locid}rv', '321318000')
 							utils.setsetting(f'loc{locid}gc', '321318000')
 
+							# Radar frames are now added one at a time, so frames made at the old zoom must go
+							for frame in Path(f'{config.addon_cache}/{locid}/iemradar').glob('*.png'):
+								try:
+									frame.unlink()
+								except OSError as e:
+									utils.log(f'Could not remove {frame.name}: {e}', 2)
+
 				# Map provider changed - re-download base maps
 				if current.get('mapprovider') != self.old.get('mapprovider'):
 					utils.log('Map provider changed, re-downloading base maps ...')

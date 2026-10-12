@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="weather.kodiweather" name="Kodi Weather" version="2.4.13" provider-name="Echo-Storm">
+<addon id="weather.kodiweather" name="Kodi Weather" version="2.5.0" provider-name="Echo-Storm">
 	<requires>
 		<import addon="xbmc.python" version="3.0.0"/>
 		<import addon="script.module.requests" version="2.27.1+matrix.1"/>
@@ -8,10 +8,12 @@
 		<import addon="script.module.pil" version="1.1.7"/>
 	</requires>
 	<extension point="xbmc.python.weather" library="default.py"/>
+	<extension point="xbmc.python.script" library="screen.py"/>
 	<extension point="xbmc.service" library="service.py" />
 	<extension point="xbmc.addon.metadata">
 		<summary lang="en_GB">Kodi Weather</summary>
 		<description lang="en_GB">Aeon Echostorm Edition Weather, maps, and alerts for US locations.</description>
+		<news>2.5.0: Kodi 22 and Silvo 11 ready. The add-on now has its own weather screen. New 36 Hour and Weekend forecasts, updated time, daily wind and chance of rain, hourly heat index and wind chill. Radar refreshes every 10 minutes with far fewer downloads and a fitted map. About 75% fewer window properties, cleaner code, smaller download.</news>
 		<platform>all</platform>
 		<license>MIT</license>
 		<source>https://github.com/Echo-Storm</source>

@@ -109,7 +109,7 @@
 
 			<group id="1" label="32260">
 				<setting id="mapzoom" type="integer" label="32285" help=""><level>0</level><default>6</default><constraints><minimum>2</minimum><step>1</step><maximum>10</maximum></constraints><control type="slider" format="integer"><popup>false</popup></control></setting>
-				<setting id="maphistory" type="integer" label="32272" help=""><level>0</level><default>24</default><constraints><minimum>4</minimum><step>4</step><maximum>48</maximum></constraints><control type="slider" format="integer"><popup>false</popup><formatlabel>17998</formatlabel></control></setting>
+				<setting id="maphistory" type="integer" label="32272" help=""><level>0</level><default>8</default><constraints><minimum>2</minimum><step>1</step><maximum>8</maximum></constraints><control type="slider" format="integer"><popup>false</popup><formatlabel>17998</formatlabel></control></setting>
 				<setting id="mapprovider" type="string" label="32510" help=""><level>0</level><default>osm</default><constraints><options><option label="32511">osm</option><option label="32512">carto_dark</option><option label="32513">carto_dark_nl</option><option label="32514">carto_light</option><option label="32515">carto_light_nl</option><option label="32516">carto_voyager</option><option label="32517">opentopomap</option></options></constraints><control type="list" format="string"><heading>32510</heading></control></setting>
 			</group>
 			<group id="2" label="32281">
@@ -369,7 +369,6 @@
 		<category id="7" label="32264">
 			<visible>false</visible>
 			<group id="1" label="32260">
-				<setting id="icons" type="string" label="32290" help="" visible="false"><level>0</level><default>default</default><constraints><options><option label="32291">default</option><option label="32292">weathermap</option><option label="32293">metno</option><option label="32294">wmo</option></options></constraints><control type="list" format="string"><heading>32269</heading></control></setting>
 			</group>
 
 			<group id="2" label="10508">
@@ -420,6 +419,7 @@
 				<!-- Hidden compatibility settings -->
 				<setting help="" id="explocations" label="32314" type="boolean"><level>0</level><default>false</default><visible>false</visible><control type="toggle"/></setting>
 				<setting help="" id="enablehour" label="32288" type="boolean"><level>0</level><default>false</default><visible>false</visible><control type="toggle"/></setting>
+				<setting help="" id="enablegraphs" label="32288" type="boolean"><level>0</level><default>false</default><visible>false</visible><control type="toggle"/></setting>
 			</group>
 
 		</category>

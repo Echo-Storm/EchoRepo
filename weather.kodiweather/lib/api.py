@@ -195,7 +195,7 @@ def mapmerge(map):
 
 		try:
 			tile = Image.open(io.BytesIO(config.mapcache[item[1]][item[2]]))
-		except:
+		except (KeyError, TypeError, OSError, ValueError):
 			tile = Image.open(f'{config.addon_path}/resources/tile.png')
 		
 		image.paste(tile, (item[6], item[7]))
@@ -216,16 +216,16 @@ def mapmerge(map):
 
 			# Try to load a font, fall back to default
 			try:
-				font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 28)
-			except:
+				font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 22)
+			except OSError:
 				try:
-					font = ImageFont.truetype('arial.ttf', 28)
-				except:
+					font = ImageFont.truetype('arial.ttf', 22)
+				except OSError:
 					font = ImageFont.load_default()
 
-			# Position: right side, adjusted for best visibility
-			x = image.width - 450
-			y = image.height - 250
+			# Position: bottom left, small, so it never covers the middle of the map
+			x = 12
+			y = image.height - 36
 
 			# Draw shadow then text (simple approach)
 			draw.text((x+2, y+2), timestamp, font=font, fill=(0, 0, 0, 255))
@@ -351,7 +351,7 @@ def setloc (locid):
 				if not raw:
 					raise RuntimeError('Search returned no data')
 				data   = json.loads(raw)['results']
-			except:
+			except (RuntimeError, ValueError, KeyError, TypeError):
 				utils.log(f'[LOC{locid}] No results')
 				dialog.ok('Kodi Weather', utils.loc(284))
 			else:
