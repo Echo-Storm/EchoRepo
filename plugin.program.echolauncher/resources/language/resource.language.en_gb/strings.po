@@ -1,0 +1,49 @@
+# Echo Launcher strings
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: en_GB\n"
+
+msgctxt "#32001"
+msgid "Add add-ons ..."
+msgstr ""
+
+msgctxt "#32002"
+msgid "Add add-ons to {0}"
+msgstr ""
+
+msgctxt "#32003"
+msgid "Remove from {0}"
+msgstr ""
+
+msgctxt "#32004"
+msgid "Move up"
+msgstr ""
+
+msgctxt "#32005"
+msgid "Move down"
+msgstr ""
+
+msgctxt "#32006"
+msgid "Nothing to add: every plugin add-on is already in {0}."
+msgstr ""
+
+msgctxt "#32007"
+msgid "Added {0}"
+msgstr ""
+
+msgctxt "#32008"
+msgid "Removed {0}"
+msgstr ""
+
+msgctxt "#32009"
+msgid "Remove {0} from {1}?"
+msgstr ""
+
+msgctxt "#32010"
+msgid "not installed"
+msgstr ""
+
+msgctxt "#32011"
+msgid "This add-on is not installed on this device. Use the context menu to remove it from the list."
+msgstr ""

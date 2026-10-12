@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="plugin.program.echolauncher" name="Echo Launcher" version="1.0.0" provider-name="Echo-Storm">
+	<requires>
+		<import addon="xbmc.python" version="3.0.0"/>
+	</requires>
+	<extension point="xbmc.python.pluginsource" library="default.py">
+		<provides>video audio executable</provides>
+	</extension>
+	<extension point="xbmc.addon.metadata">
+		<summary lang="en_GB">Your own shelves of add-ons for the home screen</summary>
+		<description lang="en_GB">Keeps short lists (Audio, Video, Stream) of the add-ons you open most and shows them as folders, so a skin can use them as home screen widgets. Add add-ons to a list from a picker; remove or move them from the context menu. No service, no network, no keymaps.</description>
+		<news>1.0.0: first version. Replaces the Super Favourites folders used for the home screen widgets.</news>
+		<platform>all</platform>
+		<license>MIT</license>
+		<source>https://github.com/Echo-Storm</source>
+		<assets>
+			<icon>icon.png</icon>
+			<fanart>fanart.jpg</fanart>
+		</assets>
+	</extension>
+</addon>
