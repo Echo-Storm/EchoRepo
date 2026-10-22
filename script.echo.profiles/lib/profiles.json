@@ -1,0 +1,183 @@
+{
+ "about": "Config sets for the owner's machines (not Kodi's multi-user profiles). tools/profile_builder.py applies one to a Kodi userdata folder. Every key that any profile sets is 'managed': a profile that does not set it resets it to the add-on's / Kodi's own default, so switching between profiles is repeatable. Values are strings, exactly as the add-on stores them; null = reset to default. Reasons are in docs/profile-settings.md.",
+ "quality_all": "SD, 720p, 1080p, 4K",
+ "quality_1080": "SD, 720p, 1080p",
+ "profiles": {
+  "4K_7CH_4K": {
+   "describe": "Owner's PC: RTX 4070 Ti -> TCL QM7L Pro -> eARC -> Yamaha A2A. 5.1 PCM / passthrough (Atmos), 4K, HDR10 + Dolby Vision allowed.",
+   "gui": {
+    "audiooutput.channels": "8",
+    "audiooutput.passthrough": "true",
+    "audiooutput.audiodevice": "WASAPI:{EF82BC45-EF96-444C-B33E-BB8AC3C63958}|HDMI - Yamaha A2A Avantage (NVIDIA High Definition Audio)",
+    "audiooutput.passthroughdevice": "WASAPI:{EF82BC45-EF96-444C-B33E-BB8AC3C63958}|HDMI - Yamaha A2A Avantage (NVIDIA High Definition Audio)"
+   },
+   "addons": {
+    "plugin.video.gears": {
+     "db": {
+      "auto_play_movie": "true",
+      "auto_play_episode": "true",
+      "provider.external": "true",
+      "external_scraper.module": "script.module.gearsscrapers",
+      "external_scraper.name": "Gears Scrapers"
+     }
+    },
+    "plugin.video.thechains": {
+     "xml": {
+      "trakt": "false",
+      "trakt_world": "false",
+      "trakt_manager": "false",
+      "trakt_info": "false",
+      "trakt_watched": "false",
+      "trakt_unwatched": "false"
+     }
+    },
+    "plugin.video.ghost": {
+     "xml": {
+      "trakt": "false",
+      "trakt_world": "false",
+      "trakt_manager": "false",
+      "trakt_info": "false",
+      "trakt_watched": "false",
+      "trakt_unwatched": "false"
+     }
+    },
+    "plugin.video.madtitansports": {
+     "xml": {
+      "store_refresh_notifications": "false"
+     }
+    }
+   }
+  },
+  "4K_2CH_1080": {
+   "describe": "Dad's PCs (Optiplex minis, stereo, slow internet): 2.0, no passthrough, WASAPI default device, 1080p cap, no HDR / Dolby Vision / AV1 (HEVC kept), Nixtoons auto-plays the highest quality.",
+   "gui": {
+    "audiooutput.channels": "1",
+    "audiooutput.passthrough": "false",
+    "audiooutput.audiodevice": "WASAPI:default",
+    "audiooutput.passthroughdevice": "WASAPI:default"
+   },
+   "addons": {
+    "plugin.video.pov": {
+     "xml": {
+      "results_quality_movie": "@quality_1080",
+      "results_quality_episode": "@quality_1080",
+      "autoplay_quality_movie": "@quality_1080",
+      "autoplay_quality_episode": "@quality_1080",
+      "filter_hdr": "1",
+      "filter_dv": "1",
+      "filter_av1": "1"
+     }
+    },
+    "plugin.video.gears": {
+     "db": {
+      "results_quality_movie": "@quality_1080",
+      "results_quality_episode": "@quality_1080",
+      "autoplay_quality_movie": "@quality_1080",
+      "autoplay_quality_episode": "@quality_1080",
+      "filter.hdr": [
+       "1",
+       "Exclude"
+      ],
+      "filter.dv": [
+       "1",
+       "Exclude"
+      ],
+      "filter.av1": [
+       "1",
+       "Exclude"
+      ],
+      "auto_play_movie": "true",
+      "auto_play_episode": "true",
+      "provider.external": "true",
+      "external_scraper.module": "script.module.gearsscrapers",
+      "external_scraper.name": "Gears Scrapers"
+     }
+    },
+    "plugin.video.otaku": {
+     "xml": {
+      "general.maxResolution": "3"
+     }
+    },
+    "plugin.video.thechains": {
+     "xml": {
+      "max_quality": "1",
+      "max_quality_tv": "1",
+      "trakt": "false",
+      "trakt_world": "false",
+      "trakt_manager": "false",
+      "trakt_info": "false",
+      "trakt_watched": "false",
+      "trakt_unwatched": "false"
+     }
+    },
+    "plugin.video.ghost": {
+     "xml": {
+      "max_quality": "1",
+      "max_quality_tv": "1",
+      "trakt": "false",
+      "trakt_world": "false",
+      "trakt_manager": "false",
+      "trakt_info": "false",
+      "trakt_watched": "false",
+      "trakt_unwatched": "false"
+     }
+    },
+    "plugin.video.watchnixtoons2": {
+     "xml": {
+      "playbackMethod": "1"
+     }
+    },
+    "plugin.video.madtitansports": {
+     "xml": {
+      "store_refresh_notifications": "false"
+     }
+    }
+   }
+  },
+  "4K_2CH_4K": {
+   "describe": "4K, stereo (2.0), no passthrough, WASAPI default device; everything on (4K, HDR, Dolby Vision). For the Android boxes and any PC or TV without a surround system.",
+   "gui": {
+    "audiooutput.channels": "1",
+    "audiooutput.passthrough": "false",
+    "audiooutput.audiodevice": "WASAPI:default",
+    "audiooutput.passthroughdevice": "WASAPI:default"
+   },
+   "addons": {
+    "plugin.video.gears": {
+     "db": {
+      "auto_play_movie": "true",
+      "auto_play_episode": "true",
+      "provider.external": "true",
+      "external_scraper.module": "script.module.gearsscrapers",
+      "external_scraper.name": "Gears Scrapers"
+     }
+    },
+    "plugin.video.thechains": {
+     "xml": {
+      "trakt": "false",
+      "trakt_world": "false",
+      "trakt_manager": "false",
+      "trakt_info": "false",
+      "trakt_watched": "false",
+      "trakt_unwatched": "false"
+     }
+    },
+    "plugin.video.ghost": {
+     "xml": {
+      "trakt": "false",
+      "trakt_world": "false",
+      "trakt_manager": "false",
+      "trakt_info": "false",
+      "trakt_watched": "false",
+      "trakt_unwatched": "false"
+     }
+    },
+    "plugin.video.madtitansports": {
+     "xml": {
+      "store_refresh_notifications": "false"
+     }
+    }
+   }
+  }
+ }
+}

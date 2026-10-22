@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="script.echo.profiles" name="Echo Profiles" version="1.0.0" provider-name="Echo-Storm">
+	<requires>
+		<import addon="xbmc.python" version="3.0.0"/>
+	</requires>
+	<extension point="xbmc.python.script" library="default.py">
+		<provides>executable</provides>
+	</extension>
+	<extension point="xbmc.addon.metadata">
+		<summary lang="en_GB">Switch this install between the Echo config sets: 4K surround, 1080p stereo, 4K stereo</summary>
+		<description lang="en_GB">Pick a config set and it is applied to this install: audio output and passthrough (through Kodi's own settings), and the quality caps and filters of POV, Gears, Otaku, The Chains, Ghost, WatchNixtoons2 and Mad Titan Sports. 4K_7CH_4K: 7.1 / passthrough to a receiver, 4K, HDR and Dolby Vision allowed. 4K_2CH_1080: stereo, no passthrough, 1080p cap, no HDR / Dolby Vision / AV1. 4K_2CH_4K: stereo, no passthrough, 4K and everything on. A surround device that this PC does not have is skipped, not forced. Settings are backed up first (userdata/profile_backups); Kodi should be restarted afterwards so every add-on re-reads its settings. No service, nothing runs in the background.</description>
+		<news>1.0.0: first version, same engine as tools/profile_builder.py.</news>
+		<platform>all</platform>
+		<license>MIT</license>
+		<source>https://github.com/Echo-Storm</source>
+		<assets>
+			<icon>icon.png</icon>
+			<fanart>fanart.jpg</fanart>
+		</assets>
+	</extension>
+</addon>
